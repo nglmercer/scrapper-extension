@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "TikTok Live Interceptor",
+  "version": "1.0",
+  "description": "Intercepta y decodifica mensajes de TikTok Live",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.tiktok.com/*",
+    "https://live.tiktok.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["https://www.tiktok.com/*"],
+    "js": ["protobuf.min.js", "content.js"],
+    "run_at": "document_start"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["injected.js", "protobuf.min.js"],
+    "matches": ["https://www.tiktok.com/*", "https://live.tiktok.com/*"]
+  }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}
