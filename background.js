@@ -20,42 +20,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'TIKTOK_LIVE_EVENT') {
         console.log('Evento de TikTok Live:', request.data);
         
-        // Aquí puedes procesar los eventos como quieras:
-        // - Guardar en storage
-        // - Enviar a un servidor
-        // - Mostrar notificaciones
-        // - Etc.
-        
-        // Ejemplo: guardar en storage
-        chrome.storage.local.get(['tiktokEvents'], (result) => {
-            const events = result.tiktokEvents || [];
-            events.push({
-                ...request.data,
-                timestamp: Date.now(),
-                tabId: sender.tab?.id
-            });
-            
-            // Mantener solo los últimos 100 eventos
-            if (events.length > 100) {
-                events.splice(0, events.length - 100);
-            }
-            
-            chrome.storage.local.set({ tiktokEvents: events });
-        });
-        
-        // Ejemplo: mostrar notificación para gifts
-        if (request.data.eventName === 'gift') {
-            const user = request.data.data.user?.nickname || 'Usuario';
-            const giftName = request.data.data.giftDetails?.giftName || 'Regalo';
-            
-            chrome.notifications.create({
-                type: 'basic',
-                iconUrl: 'icon48.png',
-                title: 'Regalo recibido!',
-                message: `${user} envió: ${giftName}`
-            });
-        }
-        
         sendResponse({ success: true });
     }
     

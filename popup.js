@@ -81,6 +81,7 @@ function webhookformlisteners(){
         window.localStorage.webhookUrl = webhook_input.value;
     });
 }
+
 document.addEventListener("DOMContentLoaded",()=>{
          initializetabs();
          redirectlistener();

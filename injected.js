@@ -326,6 +326,7 @@ let debugStats = {
     messagesDecoded: 0,
     messagesSent: 0,
     errors: 0,
+    acksSent: 0,
     startTime: Date.now()
 };
 
@@ -361,7 +362,6 @@ function sendToContentScript(eventName, data) {
 
 // Función para descomprimir GZIP
 async function decompressGzip(gzipBuffer) {
-    debugLog('GZIP', `Descomprimiendo buffer gzip de ${gzipBuffer.length} bytes`);
     
     if (!window.DecompressionStream) {
         debugLog('GZIP', '❌ DecompressionStream no disponible, devolviendo buffer original');
@@ -390,7 +390,6 @@ async function decompressGzip(gzipBuffer) {
             offset += chunk.length;
         }
         
-        debugLog('GZIP', `✅ Descompresión exitosa: ${gzipBuffer.length} -> ${concatenated.length} bytes`);
         return concatenated;
     } catch (error) {
         debugStats.errors++;
@@ -446,7 +445,7 @@ async function waitForProtobuf(maxWaitTime = 10000) {
             'WebcastSubNotifyMessage': 'subscribe',
         };
 
-        debugLog('INIT', '✅ Esquema protobuf parseado correctamente');
+        debugLog('INIT', '✅ Esquema protobuf parseado correctamente',debugStats);
 
         // Función para decodificar mensajes
         async function deserializeWebsocketMessage(binaryMessage) {
@@ -474,7 +473,9 @@ async function waitForProtobuf(maxWaitTime = 10000) {
 
         // Monkey-patch del WebSocket
         const OriginalWebSocket = window.WebSocket;
-        
+        function serializeMessage(protoName, obj) {
+          return root.lookupType(`TikTok.${protoName}`).encode(obj).finish();
+        }
         window.WebSocket = function(url, protocols) {
             debugLog('WEBSOCKET', `Nuevo WebSocket: ${url}`);
             
@@ -500,7 +501,14 @@ async function waitForProtobuf(maxWaitTime = 10000) {
                         
                         try {
                             const decodedResponse = await deserializeWebsocketMessage(event.data);
-                            
+                            if (decodedResponse && decodedResponse.id && decodedResponse.id > 0) {
+                              const ackMsg = serializeMessage('WebcastWebsocketAck', { 
+                                type: 'ack', 
+                                id: decodedResponse.id  // ✅ Usar decodedResponse.id
+                              });
+                              ws.send(ackMsg);
+                              debugStats.acksSent++; // Para debugging
+                            }
                             if (decodedResponse && decodedResponse.messages) {
                                 debugStats.messagesDecoded++;
                                 
