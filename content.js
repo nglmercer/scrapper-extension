@@ -6,6 +6,7 @@ console.log('Content script cargado para TikTok Live Interceptor');
 // content.js - Solución 1: Namespace aislado
 // Función para inyectar script en la página
 let extensionNamespace;
+let originalProtobuf;
 function injectScript() {
     extensionNamespace = 'TikTokInterceptor_' + Date.now();
     const protoscript = document.createElement('script');

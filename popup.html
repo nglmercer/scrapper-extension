@@ -1,28 +1,43 @@
-<!-- popup.html -->
 <!DOCTYPE html>
 <html>
+
 <head>
-  <style>
-    body {
-      width: 300px;
-      padding: 20px;
-    }
-    button {
-      width: 100%;
-      padding: 10px;
-      background: #4285f4;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #3367d6;
-    }
-  </style>
+  <meta charset="UTF-8">
+  <title>Opciones de la Extensión</title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <h3>Mi Extensión</h3>
+  <div class="container">
+    <div class="tabs">
+      <button class="tablink active" id="openTabgeneral">General</button>
+      <button class="tablink" id="openTabavanzado">Avanzado</button>
+    </div>
+    <div id="general" class="tabcontent" style="display: block;">
+      <h3>Configuración General</h3>
+      <div class="option">
+        <label for="WebhookOption">Activar Webhook</label>
+        <label class="switch">
+          <input type="checkbox" id="WebhookOption">
+          <span class="slider round"></span>
+        </label>
+      </div>
+    </div>
+    <div id="avanzado" class="tabcontent">
+      <div class="option flex flex-wrap gap-10">
+        <form id="redirectForm">
+          <label for="uniqueId_channel"><h3>Redigir a un canal</h3></label>
+          <input type="text" id="uniqueId_channel" placeholder="Ingresa el nombre del canal">
+
+          <button class="btn-save" type="submit">Go</button>
+        </form>
+      </div>
+    </div>
+    <div class="footer">
+      <div id="status"></div>
+    </div>
+  </div>
   <script src="popup.js"></script>
 </body>
+
 </html>
