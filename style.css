@@ -106,6 +106,9 @@ input:checked + .slider:before {
 .flex-wrap {
     flex-wrap: wrap;
 }
+.gap-2 {
+    gap: 2px;
+}
 .gap-10 {
     gap: 10px
 }

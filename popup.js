@@ -55,12 +55,34 @@ function redirectlistener(){
         // O abrir en nueva pestaña: window.open(redirect, '_blank');
     })
 }
+const defaultWebhook = window.localStorage.webhookUrl || "";
 function webhookformlisteners(){
-    const webhook_input = document.getElementById("webhook_input");
-    const webhookForm = document.getElementById("webhookForm");
-    if (!webhook_input ||!webhookForm) return;
+    const webhook_input = document.getElementById("WebhookUrl");
+    const WebhookOption = document.getElementById("WebhookOption");
+    const webhook_container = document.getElementById("webhook_container");
+    if (!webhook_input ||!WebhookOption || !webhook_container) return;
+    const changeWebhook = ()=>{
+        if (WebhookOption.checked){
+            webhook_container.style.display = "flex";
+        }else{
+            webhook_container.style.display = "none";
+        }
+    }
+    WebhookOption.checked = window.localStorage.WebhookOption === "true";
+    changeWebhook();
+    WebhookOption.addEventListener("change",()=>{
+        changeWebhook();
+        window.localStorage.WebhookOption = WebhookOption.checked;
+    });
+
+    webhook_input.value = defaultWebhook;
+    webhook_input.addEventListener("change",()=>{
+        console.log(webhook_input.value)
+        window.localStorage.webhookUrl = webhook_input.value;
+    });
 }
 document.addEventListener("DOMContentLoaded",()=>{
          initializetabs();
          redirectlistener();
+         webhookformlisteners();
 })
