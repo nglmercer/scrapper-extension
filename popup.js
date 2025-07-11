@@ -1,18 +1,31 @@
-// popup.js
+/**
+ * @file popup.js
+ * @description Script para controlar la lógica de la ventana emergente (popup) de la extensión.
+ */
+
+/**
+ * Espera a que el contenido del DOM del popup se cargue completamente.
+ */
 document.addEventListener('DOMContentLoaded', () => {
-  const button = document.getElementById('cambiarColor');
-  function getrandomColor(){
-    const newcolor = 
-    `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
-    return newcolor;
-  }
+  /**
+   * El botón para cambiar el color de fondo de la página.
+   * @type {HTMLButtonElement}
+   */
+  const button = document.getElementById('button');
+  if (!button) return;
+  /**
+   * Agrega un listener para el evento 'click' en el botón.
+   * Cuando se hace clic, envía un mensaje al content script de la pestaña activa.
+   */
   button.addEventListener('click', async () => {
+    /**
+     * Obtiene la pestaña activa en la ventana actual.
+     * @type {chrome.tabs.Tab}
+     */
     const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-    const newcolor = getrandomColor();
-    console.log("getrandomColor",newcolor)
+    // Envía un mensaje al content script de la pestaña obtenida.
     chrome.tabs.sendMessage(tab.id, {
-      action: 'cambiarColor',
-      color: newcolor
+      action: 'data',
     });
   });
 });

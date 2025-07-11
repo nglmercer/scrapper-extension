@@ -1,4 +1,7 @@
-// content.js
+/**
+ * @file content.js
+ * @description Este script se inyecta en las páginas web para interactuar con su contenido.
+ */
 console.log('Content script cargado para TikTok Live Interceptor');
 // content.js - Solución 1: Namespace aislado
 // Función para inyectar script en la página
@@ -63,14 +66,14 @@ if (document.readyState === 'loading') {
     injectScript();
 }
 
-// También cambiar el color de fondo como ejemplo
-document.body.style.backgroundColor = '#000000';
 
-// Escuchar mensajes del popup
+/**
+ * Escucha los mensajes enviados desde otras partes de la extensión (como el popup o el background script).
+ * @param {object} request - El mensaje enviado.
+ * @param {chrome.runtime.MessageSender} sender - Información sobre el remitente del mensaje.
+ * @param {function} sendResponse - Función para enviar una respuesta al remitente.
+ * @returns {boolean} - Devuelve true para indicar que la respuesta se enviará de forma asíncrona.
+ */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'cambiarColor') {
-        console.log('Cambiando color:', request.color);
-        document.body.style.backgroundColor = request.color;
-        sendResponse({success: true});
-    }
+
 });
