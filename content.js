@@ -154,7 +154,23 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         }
     }
 });
+const CHANNEL_NAME = 'live-channel';
 
+function initBroadcastChannel() {
+    const channel = new BroadcastChannel(CHANNEL_NAME);
+    
+    channel.onmessage = (event) => {
+        console.log('Mensaje recibido desde el script inyectado:', event.data);
+    };
+    
+    channel.onerror = (error) => {
+        console.error('Error en BroadcastChannel:', error);
+    };
+    
+    return channel;
+}
+let newWindow = false;
+const channel = initBroadcastChannel();
 window.addEventListener('message',async (event) => {
     // Solo procesar mensajes de nuestro origen
     if (event.source !== window || !event.data.type) return;
@@ -165,6 +181,23 @@ window.addEventListener('message',async (event) => {
         if ( webhookUrl && WebhookOption){
             const result = await postJSON(webhookUrl, event.data.payload);
             console.log("result",result,{ webhookUrl, WebhookOption });
+        }
+            channel.postMessage({
+                type: 'TIKTOK_LIVE_EVENT',
+                payload: {
+                    ...event.data.payload,
+                }
+            });
+        if (!newWindow){
+            const newWindowUrl = "https://nglmercer.github.io/multistreamASTRO/";
+            newWindow = window.open(newWindowUrl);
+        } else {
+            newWindow.postMessage({
+                type: 'TIKTOK_LIVE_EVENT',
+                payload: {
+                   ...event.data.payload,
+                }
+            }, '*');
         }
         console.log('Evento recibido desde página:', event.data.payload,now.toString());
         // Enviar al background script o procesar aquí

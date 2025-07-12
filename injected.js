@@ -420,9 +420,7 @@ async function waitForProtobuf(maxWaitTime = 10000) {
 
 // Función principal de inicialización
 (async () => {
-    debugLog('INIT', 'Script inyectado iniciando...');
-
-    try {
+        debugLog('INIT', 'Script inyectado iniciando...');
         // Esperar a que protobuf esté disponible
         await waitForProtobuf();
         
@@ -564,9 +562,4 @@ async function waitForProtobuf(maxWaitTime = 10000) {
         
         // Mostrar estadísticas periódicamente
         setInterval(showStats, 10000);
-
-    } catch (error) {
-        debugStats.errors++;
-        debugLog('INIT', '💥 Error fatal:', error);
-    }
 })();
