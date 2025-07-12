@@ -139,31 +139,36 @@ const result = await postJSON('https://api.example.com/users', {
 console.log(result);
 */
 // Escuchar mensajes del script inyectado
-function getWebhookParams() {
-    const webhookUrl = window.localStorage.webhookUrl || "";
-    const WebhookOption = window.localStorage.WebhookOption === "true";
-    return { webhookUrl, WebhookOption };
-}
+let webhookUrl = window.localStorage.webhookUrl || window.webhookUrl || "";
+let WebhookOption = window.localStorage.WebhookOption === "true" || window.WebhookOption || false;
+chrome.storage.local.get(['webhookUrl', 'WebhookOption'], (result) => {
+    webhookUrl = result.webhookUrl || webhookUrl;
+    WebhookOption = result.WebhookOption || WebhookOption;
+})
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
+        if (key === 'webhookUrl') {
+            webhookUrl = newValue;
+        } else if (key === 'WebhookOption') {
+            WebhookOption = newValue;
+        }
+    }
+});
+
 window.addEventListener('message',async (event) => {
     // Solo procesar mensajes de nuestro origen
     if (event.source !== window || !event.data.type) return;
     
     if (event.data.type === 'TIKTOK_LIVE_EVENT') {
         const now = Date.now();
-        const { webhookUrl, WebhookOption } = getWebhookParams();
-        console.log("getWebhookParams",getWebhookParams())
+        console.log("getWebhookParams",{ webhookUrl, WebhookOption })
         if ( webhookUrl && WebhookOption){
             const result = await postJSON(webhookUrl, event.data.payload);
-            console.log("result",result,getWebhookParams());
+            console.log("result",result,{ webhookUrl, WebhookOption });
         }
         console.log('Evento recibido desde página:', event.data.payload,now.toString());
         // Enviar al background script o procesar aquí
-        chrome.runtime.sendMessage({
-            type: 'TIKTOK_LIVE_EVENT',
-            data: event.data.payload
-        }).catch(err => {
-            console.warn('Error enviando mensaje al background:', err);
-        });
+
     }
 });
 
@@ -173,15 +178,3 @@ if (document.readyState === 'loading') {
 } else {
     injectScript();
 }
-
-
-/**
- * Escucha los mensajes enviados desde otras partes de la extensión (como el popup o el background script).
- * @param {object} request - El mensaje enviado.
- * @param {chrome.runtime.MessageSender} sender - Información sobre el remitente del mensaje.
- * @param {function} sendResponse - Función para enviar una respuesta al remitente.
- * @returns {boolean} - Devuelve true para indicar que la respuesta se enviará de forma asíncrona.
- */
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-
-});

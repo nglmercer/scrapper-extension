@@ -350,14 +350,17 @@ function showStats() {
 
 // Función para enviar eventos a content script
 function sendToContentScript(eventName, data) {
-    window.postMessage({
-        type: 'TIKTOK_LIVE_EVENT',
-        payload: {
+  const payload = {
             eventName,
             data,
             timestamp: Date.now()
         }
+    window.postMessage({
+        type: 'TIKTOK_LIVE_EVENT',
+        payload
     }, '*');
+    // Primero, obtén la pestaña activa
+
 }
 
 // Función para descomprimir GZIP

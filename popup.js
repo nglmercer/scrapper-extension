@@ -73,12 +73,20 @@ function webhookformlisteners(){
     WebhookOption.addEventListener("change",()=>{
         changeWebhook();
         window.localStorage.WebhookOption = WebhookOption.checked;
+        window.WebhookOption = WebhookOption.checked;
+        chrome.storage.local.set({
+            WebhookOption: WebhookOption.checked,
+        });
     });
 
     webhook_input.value = defaultWebhook;
     webhook_input.addEventListener("change",()=>{
         console.log(webhook_input.value)
         window.localStorage.webhookUrl = webhook_input.value;
+        window.webhookUrl = webhook_input.value;
+        chrome.storage.local.set({
+            webhookUrl: webhook_input.value,
+        });
     });
 }
 
@@ -87,3 +95,8 @@ document.addEventListener("DOMContentLoaded",()=>{
          redirectlistener();
          webhookformlisteners();
 })
+chrome.runtime.onMessage.addListener(
+  function(request, sender, sendResponse) {
+  const { type, payload } = request;
+  console.log("popup",request)
+});
