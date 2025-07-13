@@ -16,8 +16,8 @@ function injectScript() {
     script.onload = function() {
         console.log('Script inyectado correctamente');
     };
-    script.onerror = function() {
-        console.error('Error al inyectar script');
+    script.onerror = function(e) {
+        console.error('Error al inyectar script',e);
         this.remove();
     };
     protoscript.onload = function() {
