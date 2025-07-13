@@ -37,6 +37,21 @@
             <input type="text" id="WebhookUrl" placeholder="url del Webhook">
         </label>
       </div>
+        <div class="option">
+        <label for="OpenWindow"><h3>Abrir Ventana</h3></label>
+        <label class="switch">
+          <input type="checkbox" id="OpenWindow">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <div class="option flex flex-wrap gap-10" id="WindowUrl_container">
+        <label for="WindowUrl"><h4>URL</h4></label>
+        <label>
+            <input type="text" id="WindowUrl" placeholder="url de la web" value="https://nglmercer.github.io/multistreamASTRO/">
+        </label>
+      </div>
+      <button class="save btn-save">Guardar</button>
+      <button class="reset" id="resetButton">Reset</button>
     </div>
     <div class="footer">
       <div id="status"></div>

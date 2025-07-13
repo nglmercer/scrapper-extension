@@ -139,16 +139,16 @@ const result = await postJSON('https://api.example.com/users', {
 console.log(result);
 */
 // Escuchar mensajes del script inyectado
-let webhookUrl = window.localStorage.webhookUrl || window.webhookUrl || "";
+let WebhookUrl = window.localStorage.WebhookUrl || window.WebhookUrl || "";
 let WebhookOption = window.localStorage.WebhookOption === "true" || window.WebhookOption || false;
-chrome.storage.local.get(['webhookUrl', 'WebhookOption'], (result) => {
-    webhookUrl = result.webhookUrl || webhookUrl;
+chrome.storage.local.get(['WebhookUrl', 'WebhookOption'], (result) => {
+    WebhookUrl = result.WebhookUrl || WebhookUrl;
     WebhookOption = result.WebhookOption || WebhookOption;
 })
 chrome.storage.onChanged.addListener((changes, namespace) => {
     for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
-        if (key === 'webhookUrl') {
-            webhookUrl = newValue;
+        if (key === 'WebhookUrl') {
+            WebhookUrl = newValue;
         } else if (key === 'WebhookOption') {
             WebhookOption = newValue;
         }
@@ -162,10 +162,10 @@ window.addEventListener('message',async (event) => {
     
     if (event.data.type === 'TIKTOK_LIVE_EVENT') {
         const now = Date.now();
-        console.log("getWebhookParams",{ webhookUrl, WebhookOption })
-        if ( webhookUrl && WebhookOption){
-            const result = await postJSON(webhookUrl, event.data.payload);
-            console.log("result",result,{ webhookUrl, WebhookOption });
+        console.log("getWebhookParams",{ WebhookUrl, WebhookOption })
+        if ( WebhookUrl && WebhookOption){
+            const result = await postJSON(WebhookUrl, event.data.payload);
+            console.log("result",result,{ WebhookUrl, WebhookOption });
         }
         if (!newWindow){
             const newWindowUrl = "https://nglmercer.github.io/multistreamASTRO/";
