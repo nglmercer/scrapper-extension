@@ -6,7 +6,7 @@
     }
   },
   "name": "MultiStream Live Interceptor",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Intercepta y decodifica mensajes de TikTok Live",
   "permissions": [
     "activeTab",
@@ -26,9 +26,6 @@
       "128": "./icons/icon-128.png",
       "256": "./icons/icon-256.png"
     }
-  },
-  "background": {
-    "service_worker": "background.js"
   },
   "content_scripts": [{ 
     "matches": ["https://www.tiktok.com/*","https://kick.com/*"],
