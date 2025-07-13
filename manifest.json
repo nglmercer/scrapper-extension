@@ -5,7 +5,7 @@
       "id": "nglmercer@gmail.com"
     }
   },
-  "name": "TikTok Live Interceptor",
+  "name": "MultiStream Live Interceptor",
   "version": "1.0",
   "description": "Intercepta y decodifica mensajes de TikTok Live",
   "permissions": [

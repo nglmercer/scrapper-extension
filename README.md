@@ -1,8 +1,8 @@
-# TikTok Live Interceptor
+# MultiStream Live Interceptor
 
 ## Overview
 
-TikTok Live Interceptor is a browser extension designed to intercept and decode messages from TikTok Live and Kick streams. It captures various events like chats, gifts, likes, and follows, and provides the ability to forward these events to a specified webhook URL or display them in a separate window.
+MultiStream Live Interceptor is a browser extension designed to intercept and decode messages from TikTok Live and Kick streams. It captures various events like chats, gifts, likes, and follows, and provides the ability to forward these events to a specified webhook URL or display them in a separate window.
 
 ## Features
 

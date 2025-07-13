@@ -2,7 +2,7 @@
  * @file content.js
  * @description Este script se inyecta en las páginas web para interactuar con su contenido.
  */
-console.log('Content script cargado para TikTok Live Interceptor');
+console.log('Content script cargado para MultiStream Live Interceptor');
 // content.js - Solución 1: Namespace aislado
 // Función para inyectar script en la página
 let extensionNamespace;
