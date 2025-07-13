@@ -32,12 +32,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 chrome.runtime.onInstalled.addListener(() => {
     console.log('Extensión instalada');
-    
-    // Crear contexto de menú (opcional)
-    chrome.contextMenus.create({
-        id: 'tiktokInterceptor',
-        title: 'Interceptar TikTok Live',
-        contexts: ['page'],
-        documentUrlPatterns: ['https://www.tiktok.com/*']
-    });
 });

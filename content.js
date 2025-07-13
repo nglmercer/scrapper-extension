@@ -16,8 +16,8 @@ function injectScript() {
     script.onload = function() {
         console.log('Script inyectado correctamente');
     };
-    script.onerror = function() {
-        console.error('Error al inyectar script');
+    script.onerror = function(e) {
+        console.error('Error al inyectar script',e);
         this.remove();
     };
     protoscript.onload = function() {
@@ -173,7 +173,7 @@ window.addEventListener('message',async (event) => {
     // Solo procesar mensajes de nuestro origen
     if (event.source !== window || !event.data.type) return;
     
-    if (event.data.type === 'TIKTOK_LIVE_EVENT') {
+    if (event.data.type === 'TIKTOK_LIVE_EVENT' || event.data.type === 'KICK_LIVE_EVENT') {
         const now = Date.now();
         if ( WebhookUrl && WebhookOption){
             const result = await postJSON(WebhookUrl, event.data.payload);
@@ -192,7 +192,7 @@ window.addEventListener('message',async (event) => {
             return;
           }
             newWindow.postMessage({
-                type: 'TIKTOK_LIVE_EVENT',
+                type: event.data.type,
                 payload: {
                    ...event.data.payload,
                 }
