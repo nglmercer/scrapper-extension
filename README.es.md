@@ -22,7 +22,7 @@ MultiStream Live Interceptor es una extensión de navegador diseñada para inter
 
 1.  **Descarga el repositorio:**
     ```bash
-    git clone https://github.com/tu-usuario/tiktok-live-interceptor.git
+    git clone https://github.com/nglmercer/scrapper-extension.git
     ```
 2.  **Abre la página de extensiones de tu navegador:**
     -   **Chrome:** Navega a `chrome://extensions`

@@ -22,7 +22,7 @@ MultiStream Live Interceptor is a browser extension designed to intercept and de
 
 1.  **Download the repository:**
     ```bash
-    git clone https://github.com/your-username/tiktok-live-interceptor.git
+    git clone https://github.com/nglmercer/scrapper-extension.git
     ```
 2.  **Open your browser's extension page:**
     -   **Chrome:** Navigate to `chrome://extensions`
@@ -53,3 +53,7 @@ MultiStream Live Interceptor is a browser extension designed to intercept and de
 -   `protobuf.min.js`: The Protobuf.js library for decoding messages.
 -   `style.css`: Styles for the popup.
 -   `icons/`: Extension icons for different sizes.
+      
+[Versión en español](./readme.es.md)
+
+    
