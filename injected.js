@@ -781,7 +781,7 @@ class WebSocketInterceptor {
       debugStats.messagesReceived++;
       const {event,data} = safeParse(e.data);
       const parsedData = safeParse(data);
-      sendToContentScript(event, { event, data: parsedData });
+      sendToContentScript(event, { event, data: parsedData }, 'KICK_LIVE_EVENT');
       debugLog('MESSAGE', `Mensaje recibido:`, { event, data: parsedData });
     }
     // Instanciar el interceptor
