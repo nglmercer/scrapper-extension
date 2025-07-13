@@ -141,9 +141,11 @@ console.log(result);
 // Escuchar mensajes del script inyectado
 let WebhookUrl = window.localStorage.WebhookUrl || window.WebhookUrl || "";
 let WebhookOption = window.localStorage.WebhookOption === "true" || window.WebhookOption || false;
-chrome.storage.local.get(['WebhookUrl', 'WebhookOption'], (result) => {
+let WindowUrl = window.localStorage.WindowUrl || "";
+chrome.storage.local.get(['WebhookUrl', 'WebhookOption','WindowUrl'], (result) => {
     WebhookUrl = result.WebhookUrl || WebhookUrl;
     WebhookOption = result.WebhookOption || WebhookOption;
+    WindowUrl = result.WindowUrl || WindowUrl;
 })
 chrome.storage.onChanged.addListener((changes, namespace) => {
     for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
@@ -151,6 +153,8 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             WebhookUrl = newValue;
         } else if (key === 'WebhookOption') {
             WebhookOption = newValue;
+        } else if (key === 'WindowUrl') {
+            WindowUrl = newValue;
         }
     }
 });
@@ -167,10 +171,11 @@ window.addEventListener('message',async (event) => {
             const result = await postJSON(WebhookUrl, event.data.payload);
             console.log("result",result,{ WebhookUrl, WebhookOption });
         }
-        if (!newWindow){
-            const newWindowUrl = "https://nglmercer.github.io/multistreamASTRO/";
+        if (!newWindow && WindowUrl){
+            const newWindowUrl = WindowUrl;
             newWindow = window.open(newWindowUrl);
         } else {
+            if (!newWindow) return;
             newWindow.postMessage({
                 type: 'TIKTOK_LIVE_EVENT',
                 payload: {
