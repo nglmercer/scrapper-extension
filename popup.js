@@ -141,7 +141,7 @@ function setupOptionListeners(config) {
   // Recupera y establece el valor inicial del input
   inputField.value =
     window.localStorage.getItem(config.storageKey) || config.defaultInput || "";
-
+    chrome.storage.local.set({ [config.storageKey]: inputField.value });
   // Listener para cuando cambia el input
   inputField.addEventListener("change", () => {
     const value = inputField.value;

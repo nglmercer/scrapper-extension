@@ -141,20 +141,29 @@ console.log(result);
 // Escuchar mensajes del script inyectado
 let WebhookUrl = window.localStorage.WebhookUrl || window.WebhookUrl || "";
 let WebhookOption = window.localStorage.WebhookOption === "true" || window.WebhookOption || false;
-let WindowUrl = window.localStorage.WindowUrl || "";
-chrome.storage.local.get(['WebhookUrl', 'WebhookOption','WindowUrl'], (result) => {
+let WindowUrl = window.localStorage.WindowUrl || "https://nglmercer.github.io/multistreamASTRO/chat";
+let OpenWindow = window.localStorage.OpenWindow === "true" || window.OpenWindow || false;
+chrome.storage.local.get(['WebhookUrl', 'WebhookOption','WindowUrl','OpenWindow'], (result) => {
     WebhookUrl = result.WebhookUrl || WebhookUrl;
     WebhookOption = result.WebhookOption || WebhookOption;
     WindowUrl = result.WindowUrl || WindowUrl;
+    OpenWindow = result.OpenWindow || OpenWindow;
 })
 chrome.storage.onChanged.addListener((changes, namespace) => {
     for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
+      console.log("newChange ",{
+        key,
+        oldValue,
+        newValue
+      })
         if (key === 'WebhookUrl') {
             WebhookUrl = newValue;
         } else if (key === 'WebhookOption') {
             WebhookOption = newValue;
         } else if (key === 'WindowUrl') {
             WindowUrl = newValue;
+        } else if (key === 'OpenWindow') {
+            OpenWindow = newValue;
         }
     }
 });
@@ -166,16 +175,22 @@ window.addEventListener('message',async (event) => {
     
     if (event.data.type === 'TIKTOK_LIVE_EVENT') {
         const now = Date.now();
-        console.log("getWebhookParams",{ WebhookUrl, WebhookOption })
         if ( WebhookUrl && WebhookOption){
             const result = await postJSON(WebhookUrl, event.data.payload);
             console.log("result",result,{ WebhookUrl, WebhookOption });
         }
-        if (!newWindow && WindowUrl){
+        if (!newWindow){
+          if (!WindowUrl || !OpenWindow){
+            console.log("newWindow",newWindow,{ WindowUrl,OpenWindow });
+            return;
+          }
             const newWindowUrl = WindowUrl;
             newWindow = window.open(newWindowUrl);
         } else {
-            if (!newWindow) return;
+          if (!newWindow || newWindow.closed) {
+            console.log("newWindow",newWindow,{ WindowUrl,OpenWindow });
+            return;
+          }
             newWindow.postMessage({
                 type: 'TIKTOK_LIVE_EVENT',
                 payload: {
