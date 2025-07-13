@@ -54,6 +54,6 @@ MultiStream Live Interceptor is a browser extension designed to intercept and de
 -   `style.css`: Styles for the popup.
 -   `icons/`: Extension icons for different sizes.
       
-[Versión en español](./readme.es.md)
+[Versión en español](./README.es.md)
 
     
