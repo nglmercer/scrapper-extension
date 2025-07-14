@@ -2,44 +2,46 @@
  * @file content.js
  * @description Este script se inyecta en las páginas web para interactuar con su contenido.
  */
-console.log('Content script cargado para MultiStream Live Interceptor');
+console.log('Content script cargado para TikTok Live Interceptor');
 // content.js - Solución 1: Namespace aislado
 // Función para inyectar script en la página
 let extensionNamespace;
 let originalProtobuf;
-function injectScript() {
+
+function prepareEnvironment() {
     extensionNamespace = 'TikTokInterceptor_' + Date.now();
+    
+    // Guardar en un elemento DOM oculto
+    const configDiv = document.createElement('div');
+    configDiv.id = 'tiktok-interceptor-config';
+    configDiv.style.display = 'none';
+    configDiv.setAttribute('data-namespace', extensionNamespace);
+    document.body.appendChild(configDiv);
+    
+    return extensionNamespace;
+}
+
+function injectScript() {
+    const namespace = prepareEnvironment();
+    
     const protoscript = document.createElement('script');
     protoscript.src = chrome.runtime.getURL('protobuf.min.js');
+    
     const script = document.createElement('script');
     script.src = chrome.runtime.getURL('injected.js');
-    script.onload = function() {
-        console.log('Script inyectado correctamente');
-    };
-    script.onerror = function(e) {
-        console.error('Error al inyectar script',e);
-        this.remove();
-    };
-    protoscript.onload = function() {
-    // Mover protobuf a namespace único
-    window[extensionNamespace] = window.protobuf;
     
-    // Restaurar protobuf original
-    if (originalProtobuf) {
-        window.protobuf = originalProtobuf;
-    } else {
-        delete window.protobuf;
-    }
-        
-        console.log('✅ Protobuf cargado en namespace:', extensionNamespace, window[extensionNamespace]);
+    protoscript.onload = function() {
+
+        console.log('✅ Protobuf configurado globalmente');
     };
-    protoscript.onerror = function(error) {
-        console.error('❌ Error cargando protobuf:', error);
-        this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-    (document.head || document.documentElement).appendChild(protoscript);
+    
+    document.head.appendChild(protoscript);
+    document.head.appendChild(script);
+
 }
+
+
+
 /**
  * Función simple para hacer peticiones POST con JSON
  * @param {string} url - URL del endpoint
@@ -139,6 +141,61 @@ const result = await postJSON('https://api.example.com/users', {
 console.log(result);
 */
 // Escuchar mensajes del script inyectado
+async function getProtobufSchema(schemaPath = "data.proto") {
+    try {
+        console.log(`📥 Obteniendo esquema protobuf desde: ${schemaPath}`);
+        
+        // Usar chrome.runtime.getURL para obtener la URL del archivo en la extensión
+        const fileURL = chrome.runtime.getURL(schemaPath);
+        console.log(`🔗 URL del archivo: ${fileURL}`);
+        
+        const response = await fetch(fileURL);
+        
+        // Verificar si la respuesta fue exitosa
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
+        }
+        
+        // Verificar el tipo de contenido
+        const contentType = response.headers.get('content-type');
+        if (contentType && !contentType.includes('text/') && !contentType.includes('application/octet-stream')) {
+            console.warn(`⚠️ Tipo de contenido inesperado: ${contentType}`);
+        }
+        
+        const schemaText = await response.text();
+        
+        // Validar que el contenido no esté vacío
+        if (!schemaText || schemaText.trim().length === 0) {
+            throw new Error('El esquema protobuf está vacío');
+        }
+        
+        // Validación básica de sintaxis protobuf
+        if (!schemaText.includes('syntax') && !schemaText.includes('message')) {
+            console.warn('⚠️ El archivo no parece ser un esquema protobuf válido');
+        }
+        
+        console.log(`✅ Esquema protobuf obtenido exitosamente (${schemaText.length} caracteres)`);
+        return schemaText;
+        
+    } catch (error) {
+        console.error('❌ Error obteniendo esquema protobuf:', error);
+        
+        // Fallback: intentar con ruta relativa si chrome.runtime.getURL falla
+        try {
+            console.log('🔄 Intentando con ruta relativa...');
+            const fallbackResponse = await fetch(schemaPath);
+            if (fallbackResponse.ok) {
+                const fallbackText = await fallbackResponse.text();
+                console.log('✅ Esquema obtenido con fallback');
+                return fallbackText;
+            }
+        } catch (fallbackError) {
+            console.error('❌ Fallback también falló:', fallbackError);
+        }
+        
+        return null;
+    }
+}
 let WebhookUrl = window.localStorage.WebhookUrl || window.WebhookUrl || "";
 let WebhookOption = window.localStorage.WebhookOption === "true" || window.WebhookOption || false;
 let WindowUrl = window.localStorage.WindowUrl || "https://nglmercer.github.io/multistreamASTRO/chat";
@@ -167,7 +224,74 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         }
     }
 });
-
+async function getProtobufSchema(schemaPath = "data.proto") {
+    try {
+        console.log(`📥 Obteniendo esquema protobuf desde: ${schemaPath}`);
+        
+        // Usar chrome.runtime.getURL para obtener la URL del archivo en la extensión
+        const fileURL = chrome.runtime.getURL(schemaPath);
+        console.log(`🔗 URL del archivo: ${fileURL}`);
+        
+        const response = await fetch(fileURL);
+        
+        // Verificar si la respuesta fue exitosa
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
+        }
+        
+        // Verificar el tipo de contenido
+        const contentType = response.headers.get('content-type');
+        if (contentType && !contentType.includes('text/') && !contentType.includes('application/octet-stream')) {
+            console.warn(`⚠️ Tipo de contenido inesperado: ${contentType}`);
+        }
+        
+        const schemaText = await response.text();
+        
+        // Validar que el contenido no esté vacío
+        if (!schemaText || schemaText.trim().length === 0) {
+            throw new Error('El esquema protobuf está vacío');
+        }
+        
+        // Validación básica de sintaxis protobuf
+        if (!schemaText.includes('syntax') && !schemaText.includes('message')) {
+            console.warn('⚠️ El archivo no parece ser un esquema protobuf válido');
+        }
+        
+        console.log(`✅ Esquema protobuf obtenido exitosamente (${schemaText.length} caracteres)`);
+        return schemaText;
+        
+    } catch (error) {
+        console.error('❌ Error obteniendo esquema protobuf:', error);
+        
+        // Fallback: intentar con ruta relativa si chrome.runtime.getURL falla
+        try {
+            console.log('🔄 Intentando con ruta relativa...');
+            const fallbackResponse = await fetch(schemaPath);
+            if (fallbackResponse.ok) {
+                const fallbackText = await fallbackResponse.text();
+                console.log('✅ Esquema obtenido con fallback');
+                return fallbackText;
+            }
+        } catch (fallbackError) {
+            console.error('❌ Fallback también falló:', fallbackError);
+        }
+        
+        return null;
+    }
+}
+(async() => {
+    const schemaText = await getProtobufSchema('data.proto');
+    window.postMessage({
+      type: 'PROTOBUF_SCHEMA',
+      data: schemaText
+    })
+    setInterval(() => {
+        window.postMessage({
+          type: 'PROTOBUF_SCHEMA',
+          data: schemaText
+        })
+    }, 10000);
+})();
 let newWindow = false;
 window.addEventListener('message',async (event) => {
     // Solo procesar mensajes de nuestro origen

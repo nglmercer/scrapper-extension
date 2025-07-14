@@ -5,6 +5,50 @@ const protobufSCHEME = `
 syntax = "proto3";
 package TikTok;
 
+// @Common
+message CommonMessageData {
+    string method = 1;
+    int64 msgId = 2;
+    int64 roomId = 3;
+    int64 createTime = 4;
+    int32 monitor = 5;
+    bool isShowMsg = 6;
+    string describe = 7;
+    Text displayText = 8;
+    int64 foldType = 9;
+    int64 anchorFoldType = 10;
+    int64 priorityScore = 11;
+    string logId = 12;
+    string msgProcessFilterK = 13;
+    string msgProcessFilterV = 14;
+    string fromIdc = 15;
+    string toIdc = 16;
+    repeated string filterMsgTagsList = 17;
+    LiveMessageSEI sei = 18;
+    LiveMessageID dependRootId = 19;
+    LiveMessageID dependId = 20;
+    int64 anchorPriorityScore = 21;
+    int64 roomMessageHeatLevel = 22;
+    int64 foldTypeForWeb = 23;
+    int64 anchorFoldTypeForWeb = 24;
+    int64 clientSendTime = 25;
+    IMDispatchStrategy dispatchStrategy = 26; // Enum
+
+    message LiveMessageSEI {
+        LiveMessageID uniqueId = 1;
+        int64 timestamp = 2;
+    }
+
+    message LiveMessageID {
+        string primaryId = 1;
+        string messageScene = 2;
+    }
+
+    enum IMDispatchStrategy {
+        IM_DISPATCH_STRATEGY_DEFAULT = 0;
+        IM_DISPATCH_STRATEGY_BYPASS_DISPATCH_QUEUE = 1;
+    }
+}
 // Data structure from im/fetch/ response
 message WebcastResponse {
   repeated Message messages = 1;
@@ -317,7 +361,6 @@ message WebcastWebsocketAck {
   string type = 7;
 }
 `;
-
 // Variables globales para debug
 let debugStats = {
     scriptsLoaded: 0,
@@ -345,7 +388,10 @@ function debugLog(category, message, data = null) {
 // Función para mostrar estadísticas periódicas
 function showStats() {
     const uptime = Math.floor((Date.now() - debugStats.startTime) / 1000);
-    debugLog('STATS', `Uptime: ${uptime}s | Scripts: ${debugStats.scriptsLoaded}/2 | WebSockets: ${debugStats.websocketsIntercepted} | Messages: ${debugStats.messagesReceived}/${debugStats.messagesDecoded}/${debugStats.messagesSent} | Errors: ${debugStats.errors}`);
+    debugLog('STATS', '📊 Estadísticas periódicas', {
+        ...debugStats,
+        uptime
+    });
 }
 
 // Función para enviar eventos a content script
@@ -400,21 +446,96 @@ async function decompressGzip(gzipBuffer) {
 }
 
 // Función para esperar a que protobuf esté disponible
-async function waitForProtobuf(maxWaitTime = 10000) {
+// Variable global para almacenar la versión full
+let protobufFull = null;
+
+function waitForProtobuf(maxWaitTime = 10000) {
     const startTime = Date.now();
     
-    while (typeof window.protobuf === 'undefined') {
-        if (Date.now() - startTime > maxWaitTime) {
-            throw new Error('Timeout esperando protobuf');
+    // Polling síncrono más frecuente y preciso
+    while (Date.now() - startTime < maxWaitTime) {
+        // Verificar si tenemos la versión full disponible PRIMERO
+        if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse) {
+            protobufFull = window.protobuf; // Guardar la versión full inmediatamente
+            debugLog('WAIT', '✅ Protobuf FULL capturado y guardado');
+            return protobufFull;
         }
         
-        debugLog('WAIT', 'Esperando protobuf...');
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Si ya tenemos la versión full guardada, usarla
+        if (protobufFull && protobufFull.parse) {
+            debugLog('WAIT', '✅ Usando protobuf FULL previamente guardado');
+            return protobufFull;
+        }
+        
+        // Verificar protobuf global
+        if (typeof protobuf !== 'undefined' && protobuf.parse) {
+            if (protobuf.build === 'full') {
+                protobufFull = protobuf;
+                debugLog('WAIT', '✅ Protobuf FULL encontrado en variable global');
+                return protobufFull;
+            }
+        }
+        
+        // Polling cada 50ms para mayor precisión
+        const now = Date.now();
+        while (Date.now() - now < 50) {
+            // Busy wait más preciso
+        }
     }
     
-    debugLog('WAIT', '✅ Protobuf disponible');
-    return window.protobuf || protobuf;
+    // Si llegamos aquí, usar lo que tengamos disponible
+    console.warn('⚠️ No se encontró protobuf FULL, usando versión disponible');
+    const fallback = protobufFull || protobuf || window.protobuf;
+    
+    if (!fallback) {
+        throw new Error('❌ Protobuf no disponible después del timeout');
+    }
+    
+    debugLog('WAIT', '⚠️ Protobuf fallback', {
+        protobuf: fallback,
+        build: fallback.build,
+        hasParseFunction: typeof fallback.parse === 'function'
+    });
+    
+    return fallback;
 }
+
+
+// Alternativa más agresiva: MutationObserver para detectar cambios
+function setupProtobufProtection() {
+    // Guardar referencia inicial si existe
+    if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse) {
+        protobufFull = window.protobuf;
+        console.log('🔒 Protobuf FULL inicial guardado');
+    }
+    
+    // Observar cambios en el DOM para detectar nuevos scripts
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList') {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.tagName === 'SCRIPT') {
+                        // Verificar después de que se ejecute el script
+                        requestAnimationFrame(() => {
+                            if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse && !protobufFull) {
+                                protobufFull = window.protobuf;
+                                console.log('🔒 Protobuf FULL capturado via MutationObserver');
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    });
+    
+    observer.observe(document.head, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    return observer;
+}
+
+// Inicializar protección al cargar
+setupProtobufProtection();
 /**
  * Intenta parsear un valor a JSON de forma segura, con correcciones automáticas
  * @param {*} value - El valor a parsear
@@ -667,18 +788,31 @@ class WebSocketInterceptor {
         }
     }
 }
+let ProtobufText = "";
+async function getProtobufSchema() {
+  const existeProtobufText = localStorage.getItem("ProtobufText");
+  console.log("existeProtobufText",existeProtobufText)
+  return ProtobufText?.data || protobufSCHEME;
+}
+window.addEventListener("message", async (event) => {
+    if (event.data.type === "PROTOBUF_SCHEMA") {
+        ProtobufText = event.data;
+        console.log("ProtobufText", ProtobufText);
+        localStorage.setItem("ProtobufText", typeof ProtobufText?.data === "string" ? ProtobufText?.data : JSON.stringify(ProtobufText));
+    }
+})
 // Función principal de inicialización
 // (Aquí iría la definición de la clase WebSocketInterceptor del Paso 1)
-
-(async () => {
+protobuf = waitForProtobuf();
+async function initializeEvents() {
     debugLog('INIT', 'Script inyectado iniciando...');
 
-    // Esperar a que protobuf esté disponible
-    await waitForProtobuf();
-    debugLog('INIT', '✅ Protobuf cargado correctamente');
-
-    // Parsear el esquema y obtener tipos de mensaje
-    const parsed = protobuf.parse(protobufSCHEME);
+    
+    // Asegurarse de usar la versión correcta
+    const protobufInstance = waitForProtobuf();
+    const newSCHEME = await getProtobufSchema();
+    console.log("newSCHEME", newSCHEME);
+    const parsed = protobufInstance.parse(newSCHEME);
     const root = parsed.root;
     const WebcastWebsocketMessage = root.lookupType("TikTok.WebcastWebsocketMessage");
     const WebcastResponse = root.lookupType("TikTok.WebcastResponse");
@@ -701,17 +835,28 @@ class WebSocketInterceptor {
         return root.lookupType(`TikTok.${protoName}`).encode(obj).finish();
     }
 
+    // VERSIÓN CORREGIDA de deserializeWebsocketMessage
+
     async function deserializeWebsocketMessage(binaryMessage) {
         try {
             const buffer = new Uint8Array(binaryMessage);
-            const decodedWebsocketMessage = WebcastWebsocketMessage.decode(buffer);
+            // 1. Decodificar el contenedor EXTERIOR (el sobre)
+            const outerMessage = WebcastWebsocketMessage.decode(buffer);
 
-            if (decodedWebsocketMessage.type === 'msg') {
-                let binary = decodedWebsocketMessage.binary;
+            if (outerMessage.type === 'msg') {
+                let binary = outerMessage.binary;
                 if (binary && binary.length > 2 && binary[0] === 0x1f && binary[1] === 0x8b) {
                     binary = await decompressGzip(binary);
                 }
-                return WebcastResponse.decode(binary);
+                
+                // 2. Decodificar el contenido INTERIOR (la carta)
+                const innerResponse = WebcastResponse.decode(binary);
+                
+                // 3. ¡SOLUCIÓN! Devolver un objeto con AMBAS partes
+                return {
+                    outer: outerMessage, // Contiene el .id y .type
+                    inner: innerResponse // Contiene .messages y .needAck
+                };
             }
             return null;
         } catch (error) {
@@ -729,23 +874,16 @@ class WebSocketInterceptor {
     async function handleTikTokMessage(event, ws) {
         debugStats.messagesReceived++;
         try {
-            const decodedResponse = await deserializeWebsocketMessage(event.data);
+            // `result` ahora contiene las propiedades `outer` e `inner`
+            const result = await deserializeWebsocketMessage(event.data);
             
-            // Enviar mensaje de Acknowledgment (ACK) si es necesario
-            if (decodedResponse && decodedResponse.id && decodedResponse.id > 0) {
-                const ackMsg = serializeMessage('WebcastWebsocketAck', {
-                    type: 'ack',
-                    id: decodedResponse.id
-                });
-                ws.send(ackMsg); // Usamos el socket 'ws' pasado como argumento
-                debugStats.acksSent++;
-            }
-
-            // Procesar y reenviar los eventos de la sala
-            if (decodedResponse && decodedResponse.messages) {
+            // Verificamos que el resultado y el contenido interno existan
+            if (result && result.inner && result.inner.messages) {
                 debugStats.messagesDecoded++;
-                decodedResponse.messages.forEach(msg => {
-                    const eventName = protoMessageTypes[msg.type];
+
+                // Procesamos los mensajes de la misma forma que antes
+                result.inner.messages.forEach(msg => {
+                    const eventName = protoMessageTypes[msg.type] || msg.type;
                     if (eventName) {
                         try {
                             const messageProto = root.lookupType(`TikTok.${msg.type}`);
@@ -757,6 +895,18 @@ class WebSocketInterceptor {
                         }
                     }
                 });
+
+                // ¡LÓGICA DE ACK CORREGIDA!
+                // Usamos la bandera `needAck` del contenido interior y el `id` del contenedor exterior.
+                if (result.inner.needAck && result.outer.id) {
+                    const ackMsg = serializeMessage('WebcastWebsocketAck', {
+                        type: 'ack',
+                        id: result.outer.id // Usamos el ID del sobre
+                    });
+                    ws.send(ackMsg);
+                    debugStats.acksSent++;
+                    debugLog('ACK', `✅ ACK enviado para el id: ${result.outer.id}`);
+                }
             }
         } catch (err) {
             debugStats.errors++;
@@ -800,4 +950,7 @@ class WebSocketInterceptor {
     // Mostrar estadísticas periódicamente
     setInterval(showStats, 10000);
 
-})();
+}
+(()=>{
+    initializeEvents();
+})()

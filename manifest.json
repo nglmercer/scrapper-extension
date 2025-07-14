@@ -33,7 +33,7 @@
     "run_at": "document_start"
   }],
   "web_accessible_resources": [{
-    "resources": ["injected.js", "protobuf.min.js"],
+    "resources": ["injected.js", "protobuf.min.js","data.proto"],
     "matches": ["https://www.tiktok.com/*", "https://live.tiktok.com/*","https://kick.com/*"]
   }],
   "content_security_policy": {
