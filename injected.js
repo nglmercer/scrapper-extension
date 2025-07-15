@@ -693,7 +693,6 @@ class WebSocketInterceptor {
      * @param {object} options - Opciones de configuración.
      ** @param {function(string): boolean} options.urlFilter - Función que retorna true si la URL debe ser interceptada.
      * @param {function(Event, WebSocket): Promise<void>} options.onMessage - Callback asíncrono para manejar mensajes entrantes.
-     * @param {function(): Promise<string|null>} [options.getNewUrlOnReconnect] - <<< CAMBIO: Función asíncrona para obtener una nueva URL al reconectar.
      * @param {boolean} [options.autoReconnect=true] - Habilita o deshabilita la reconexión automática.
      * @param {number} [options.reconnectInterval=2000] - Intervalo inicial en milisegundos para el primer intento de reconexión.
      * @param {number} [options.maxReconnectAttempts=5] - Número máximo de intentos de reconexión consecutivos.
@@ -710,11 +709,6 @@ class WebSocketInterceptor {
         this.reconnectInterval = options.reconnectInterval ?? 2000;
         this.maxReconnectAttempts = options.maxReconnectAttempts ?? 2;
         this.reconnectAttempts = {};
-
-        // <<< CAMBIO: Validar la nueva función opcional.
-        if (options.getNewUrlOnReconnect && typeof options.getNewUrlOnReconnect !== 'function') {
-            throw new Error('La opción "getNewUrlOnReconnect" debe ser una función.');
-        }
 
         this.intercept();
         // debugLog('INIT', 'WebSocketInterceptor listo y configurado.'); // Suponiendo que tienes una función debugLog
@@ -776,12 +770,6 @@ class WebSocketInterceptor {
             if (!self.autoReconnect) {
                 return;
             }
-            
-            // <<< CAMBIO: Si no hay forma de obtener una nueva URL, no podemos reconectar de forma fiable.
-            if (typeof self.options.getNewUrlOnReconnect !== 'function') {
-                // debugLog('ERROR', 'No se puede reconectar: falta la función "getNewUrlOnReconnect" en las opciones.');
-                return;
-            }
 
             if (self.reconnectAttempts[reconnectKey] < self.maxReconnectAttempts) {
                 self.reconnectAttempts[reconnectKey]++;
@@ -792,20 +780,11 @@ class WebSocketInterceptor {
                 // <<< CAMBIO COMPLETO: Lógica de reconexión asíncrona para obtener la nueva URL.
                 setTimeout(async () => {
                     try {
-                        // debugLog('RECONNECT', 'Ejecutando getNewUrlOnReconnect para obtener una nueva URL...');
-                        const newUrl = await self.options.getNewUrlOnReconnect();
-
-                        if (newUrl && typeof newUrl === 'string') {
                             // debugLog('RECONNECT', `Nueva URL obtenida. Intentando conectar a: ${newUrl}`);
                             // Crear una nueva instancia de WebSocket. Esto pasará de nuevo por nuestro interceptor.
                             new window.WebSocket(newUrl, protocols);
-                        } else {
-                            // debugLog('ERROR', 'getNewUrlOnReconnect no retornó una URL válida. Abortando reconexión.');
-                             // Reseteamos los intentos si la función falla para no bloquear futuros intentos manuales.
-                             self.reconnectAttempts[reconnectKey] = self.maxReconnectAttempts;
-                        }
+
                     } catch (error) {
-                        // debugLog('ERROR', 'Falló la ejecución de getNewUrlOnReconnect:', error);
                         // Se detienen los intentos si la función para obtener la URL falla.
                         self.reconnectAttempts[reconnectKey] = self.maxReconnectAttempts;
                     }
@@ -859,6 +838,10 @@ window.addEventListener("message", async (event) => {
 // Función principal de inicialización
 // (Aquí iría la definición de la clase WebSocketInterceptor del Paso 1)
 protobuf = waitForProtobuf();
+let lastack = {
+  id: 0,
+  total: 0
+}
 async function initializeEvents() {
     debugLog('INIT', 'Script inyectado iniciando...');
 
@@ -954,6 +937,11 @@ async function initializeEvents() {
                 // ¡LÓGICA DE ACK CORREGIDA!
                 // Usamos la bandera `needAck` del contenido interior y el `id` del contenedor exterior.
                 if (result.inner.needAck && result.outer.id) {
+                    if (lastack.id === result.outer.id) {
+                        return;
+                    }
+                    lastack.id = result.outer.id;
+                    lastack.total++;
                     const ackMsg = serializeMessage('WebcastWebsocketAck', {
                         type: 'ack',
                         id: result.outer.id // Usamos el ID del sobre
@@ -975,10 +963,28 @@ async function initializeEvents() {
     // ¡Aquí es donde ocurre la magia!
     // Creamos una instancia de nuestro interceptor y le pasamos nuestra lógica.
     const interceptortiktok = new WebSocketInterceptor({
-        urlFilter: (url) => url && url.includes('tiktok.com'),
+        urlFilter: (url) => url && url.includes('tiktok.com') && url.includes('webcast'),
         onMessage: handleTikTokMessage
     });
-    
+    async function handleTikTokPing(event, ws) {
+        debugStats.messagesReceived++;
+        try {
+            // only seng hi and log response
+            console.log("handleTikTokPing",event.data);
+            if (event.data.includes("hi")) {
+                setTimeout(() => ws.send(event.data), 5000);
+                debugStats.messagesSent++;
+            }
+        } catch (error) {
+            debugStats.errors++;
+            debugLog('MESSAGE', '❌ Error procesando mensaje:', error);
+        }
+    }
+    const urlwsping = 'im-ws-va.tiktok.com';
+    const tiktokwsping = new WebSocketInterceptor({
+        urlFilter: (url) => url && url.includes(urlwsping),
+        onMessage: handleTikTokPing
+    })
     function handleKickMessage(e,ws){
       if (!e || typeof e.data !== 'string') {
         return;
@@ -999,6 +1005,7 @@ async function initializeEvents() {
 
     debugLog('INIT', '🎉 Interceptor de WebSocket inicializado correctamente',{
         tiktok: interceptortiktok,
+        tiktokping: tiktokwsping,
         kick: kickinterceptor
     });
 
