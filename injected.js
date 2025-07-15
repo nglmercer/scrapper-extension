@@ -687,137 +687,16 @@ function parseJsonSilent(jsonString) {
  * Clase para interceptar, depurar y manipular el tráfico de WebSockets.
  * Es configurable para apuntar a URLs específicas y manejar mensajes con lógica personalizada.
  */ 
-const reconnectLog = (label, ...args) => console.log(`[WebSocketReconnector|${label}]`, ...args);
 
-class WebSocketReconnector {
-    /**
-     * @param {object} [options] - Opciones de configuración para la reconexión.
-     * @param {number} [options.initialDelay=1000] - Retraso inicial en ms.
-     * @param {number} [options.maxDelay=30000] - Retraso máximo en ms.
-     * @param {number} [options.backoffFactor=2] - Factor por el cual se multiplica el retraso en cada intento.
-     * @param {number} [options.maxRetries=10] - Número máximo de intentos. -1 para infinitos.
-     * @param {number[]} [options.reconnectOnCodes=[1006]] - Códigos de cierre que deben activar la reconexión.
-     */
-    constructor(options = {}) {
-        this.config = {
-            initialDelay: options.initialDelay || 1000,
-            maxDelay: options.maxDelay || 30000,
-            backoffFactor: options.backoffFactor || 2,
-            maxRetries: options.maxRetries !== undefined ? options.maxRetries : 10,
-            reconnectOnCodes: options.reconnectOnCodes || [1006], // 1006: Cierre anormal
-        };
-
-        this.reconnectAttempts = 0;
-        this.timerId = null;
-        this.isReconnecting = false;
-        
-        // El método que se pasará al interceptor necesita tener el 'this' correcto.
-        this.handleDisconnection = this.handleDisconnection.bind(this);
-
-        reconnectLog('INIT', 'Reconnector listo para manejar desconexiones.');
-    }
-
-    /**
-     * Este método se utiliza como callback para el 'onClose' del interceptor.
-     * @param {CloseEvent} event - El evento de cierre del WebSocket.
-     * @param {string} url - La URL del WebSocket que se cerró.
-     * @param {string[]} protocols - Los protocolos del WebSocket.
-     */
-    handleDisconnection(event, url, protocols) {
-        if (this.isReconnecting) {
-            reconnectLog('SKIP', 'Ya hay un proceso de reconexión en curso.');
-            return;
-        }
-
-        // Decidir si debemos intentar reconectar basados en el código de cierre.
-        if (this.config.reconnectOnCodes.includes(event.code)) {
-            reconnectLog('TRIGGER', `Cierre con código ${event.code} detectado para ${url}. Iniciando reconexión.`);
-            this._startReconnection(url, protocols);
-        } else {
-            reconnectLog('INFO', `Cierre con código ${event.code}. No se requiere reconexión según la configuración.`);
-        }
-    }
-
-    /**
-     * Inicia el proceso de reconexión.
-     * @private
-     */
-    _startReconnection(url, protocols) {
-        this.isReconnecting = true;
-        this.reconnectAttempts = 0;
-        this._scheduleReconnect(url, protocols);
-    }
-
-    /**
-     * Agenda el próximo intento de reconexión usando exponential backoff.
-     * @private
-     */
-    _scheduleReconnect(url, protocols) {
-        if (this.config.maxRetries !== -1 && this.reconnectAttempts >= this.config.maxRetries) {
-            reconnectLog('FAIL', 'Se alcanzó el número máximo de reintentos. Abandonando.');
-            this.stop();
-            return;
-        }
-
-        const delay = Math.min(
-            this.config.initialDelay * Math.pow(this.config.backoffFactor, this.reconnectAttempts),
-            this.config.maxDelay
-        );
-
-        reconnectLog('SCHEDULE', `Siguiente intento de reconexión en ${delay}ms (Intento #${this.reconnectAttempts + 1}).`);
-
-        this.timerId = setTimeout(() => {
-            this._attemptReconnect(url, protocols);
-        }, delay);
-    }
-    
-    /**
-     * Ejecuta el intento de crear una nueva conexión WebSocket.
-     * @private
-     */
-    _attemptReconnect(url, protocols) {
-        reconnectLog('ATTEMPT', `Intentando reconectar a: ${url}`);
-        this.reconnectAttempts++;
-
-        try {
-            // ¡La magia sucede aquí! Al crear un nuevo WebSocket, el interceptor lo
-            // capturará automáticamente. Si la conexión tiene éxito, el ciclo de
-            // reconexión se detendrá naturalmente. Si falla, el evento 'close'
-            // se disparará de nuevo, y `handleDisconnection` iniciará otro ciclo.
-            const newSocket = new WebSocket(url, protocols);
-
-            // Escuchamos el evento 'open' una sola vez para saber que tuvimos éxito.
-            newSocket.addEventListener('open', () => {
-                reconnectLog('SUCCESS', `Reconexión exitosa a ${url}.`);
-                this.stop(); // Detenemos el ciclo de reintentos.
-            }, { once: true });
-
-        } catch (error) {
-            reconnectLog('ERROR', 'Error al intentar crear el nuevo socket.', error);
-            // Si la creación falla, agendamos el siguiente reintento.
-            this._scheduleReconnect(url, protocols);
-        }
-    }
-
-    /**
-     * Detiene cualquier intento de reconexión en curso.
-     */
-    stop() {
-        if (this.timerId) {
-            clearTimeout(this.timerId);
-            this.timerId = null;
-        }
-        this.isReconnecting = false;
-        this.reconnectAttempts = 0;
-        reconnectLog('STOP', 'Proceso de reconexión detenido.');
-    }
-}
 class WebSocketInterceptor {
     /**
      * @param {object} options - Opciones de configuración.
-     * @param {function(string): boolean} options.urlFilter - Función que retorna true si la URL debe ser interceptada.
-     * @param {function(Event, WebSocket): Promise<void>} options.onMessage - Callback para manejar mensajes.
-     * @param {function(Event, string, string[]): void} [options.onClose] - // NUEVO: Callback opcional para manejar el cierre de la conexión.
+     ** @param {function(string): boolean} options.urlFilter - Función que retorna true si la URL debe ser interceptada.
+     * @param {function(Event, WebSocket): Promise<void>} options.onMessage - Callback asíncrono para manejar mensajes entrantes.
+     * @param {function(): Promise<string|null>} [options.getNewUrlOnReconnect] - <<< CAMBIO: Función asíncrona para obtener una nueva URL al reconectar.
+     * @param {boolean} [options.autoReconnect=true] - Habilita o deshabilita la reconexión automática.
+     * @param {number} [options.reconnectInterval=2000] - Intervalo inicial en milisegundos para el primer intento de reconexión.
+     * @param {number} [options.maxReconnectAttempts=5] - Número máximo de intentos de reconexión consecutivos.
      */
     constructor(options) {
         if (!options || typeof options.urlFilter !== 'function' || typeof options.onMessage !== 'function') {
@@ -827,8 +706,18 @@ class WebSocketInterceptor {
         this.originalWebSocket = window.WebSocket;
         this.sockets = [];
 
+        this.autoReconnect = options.autoReconnect ?? true;
+        this.reconnectInterval = options.reconnectInterval ?? 2000;
+        this.maxReconnectAttempts = options.maxReconnectAttempts ?? 2;
+        this.reconnectAttempts = {};
+
+        // <<< CAMBIO: Validar la nueva función opcional.
+        if (options.getNewUrlOnReconnect && typeof options.getNewUrlOnReconnect !== 'function') {
+            throw new Error('La opción "getNewUrlOnReconnect" debe ser una función.');
+        }
+
         this.intercept();
-        debugLog('INIT', 'WebSocketInterceptor listo y configurado.');
+        // debugLog('INIT', 'WebSocketInterceptor listo y configurado.'); // Suponiendo que tienes una función debugLog
     }
 
     intercept() {
@@ -836,53 +725,100 @@ class WebSocketInterceptor {
 
         window.WebSocket = function(...args) {
             const url = args[0];
-            const protocols = args[1]; // NUEVO: Capturar los protocolos
-            const socket = new self.originalWebSocket(...args);
-
-            debugLog('INTERCEPT', `Nueva solicitud de WebSocket para: ${url}`);
+            const protocols = args[1];
 
             if (self.options.urlFilter(url)) {
-                debugLog('MATCH', `🎯 URL COINCIDE. Interceptando WebSocket para: ${url}`);
-                debugStats.websocketsIntercepted++;
+                // debugLog('INTERCEPT', `🎯 URL COINCIDE. Interceptando WebSocket para: ${url}`);
+                // debugStats.websocketsIntercepted++;
 
-                // NUEVO: Almacenamos también los protocolos para la reconexión.
-                const trackedSocket = { socket, url, protocols };
+                if (self.reconnectAttempts[url] === undefined) {
+                   self.reconnectAttempts[url] = 0;
+                }
+                
+                // Usar una clave única para los intentos de reconexión en lugar de la URL completa, 
+                // ya que la URL cambiará en cada reconexión. Podríamos usar un identificador base.
+                // Por simplicidad en este ejemplo, seguiremos usando la URL original como clave inicial.
+                const reconnectKey = url; 
+                if (self.reconnectAttempts[reconnectKey] === undefined) {
+                    self.reconnectAttempts[reconnectKey] = 0;
+                }
+
+                const socket = new self.originalWebSocket(...args);
+                const trackedSocket = { socket: socket, url: url, protocols: protocols, reconnectKey: reconnectKey };
                 self.sockets.push(trackedSocket);
 
-                // NUEVO: Pasamos los protocolos a los listeners.
-                self.attachListeners(socket, url, protocols);
-            } else {
-                debugLog('INTERCEPT', `URL no coincide. Omitiendo interceptor para: ${url}`);
-            }
+                self.attachListeners(socket, url, protocols, reconnectKey);
+                return socket;
 
-            return socket;
+            } else {
+                // debugLog('INTERCEPT', `URL no coincide. Omitiendo interceptor para: ${url}`);
+                return new self.originalWebSocket(...args);
+            }
         };
 
         window.WebSocket.prototype = this.originalWebSocket.prototype;
         Object.setPrototypeOf(window.WebSocket, this.originalWebSocket);
     }
 
-    // NUEVO: El método ahora acepta 'protocols'.
-    attachListeners(socket, url, protocols) {
+    attachListeners(socket, url, protocols, reconnectKey) {
         const self = this;
 
         socket.addEventListener('open', () => {
-            debugLog('LIFECYCLE', `✅ Conexión WebSocket ABIERTA para: ${url}`);
+            // debugLog('LIFECYCLE', `✅ Conexión WebSocket ABIERTA para: ${url}`);
+            self.reconnectAttempts[reconnectKey] = 0;
+            // debugLog('RECONNECT', `Contador de intentos para ${reconnectKey} reseteado a 0.`);
         });
 
         socket.addEventListener('close', (event) => {
-            debugLog('LIFECYCLE', `❌ Conexión WebSocket CERRADA para: ${url} (Código: ${event.code})`);
+            // debugLog('LIFECYCLE', `❌ Conexión WebSocket CERRADA para: ${url} (Código: ${event.code})`);
             self.sockets = self.sockets.filter(s => s.socket !== socket);
+
+            if (!self.autoReconnect) {
+                return;
+            }
             
-            // NUEVO: Notificar al sistema externo si el callback 'onClose' fue proporcionado.
-            if (typeof self.options.onClose === 'function') {
-                self.options.onClose(event, url, protocols);
+            // <<< CAMBIO: Si no hay forma de obtener una nueva URL, no podemos reconectar de forma fiable.
+            if (typeof self.options.getNewUrlOnReconnect !== 'function') {
+                // debugLog('ERROR', 'No se puede reconectar: falta la función "getNewUrlOnReconnect" en las opciones.');
+                return;
+            }
+
+            if (self.reconnectAttempts[reconnectKey] < self.maxReconnectAttempts) {
+                self.reconnectAttempts[reconnectKey]++;
+                const delay = self.reconnectInterval * Math.pow(2, self.reconnectAttempts[reconnectKey] - 1);
+
+                // debugLog('RECONNECT', `Intento de reconexión #${self.reconnectAttempts[reconnectKey]} para ${reconnectKey} en ${delay}ms...`);
+
+                // <<< CAMBIO COMPLETO: Lógica de reconexión asíncrona para obtener la nueva URL.
+                setTimeout(async () => {
+                    try {
+                        // debugLog('RECONNECT', 'Ejecutando getNewUrlOnReconnect para obtener una nueva URL...');
+                        const newUrl = await self.options.getNewUrlOnReconnect();
+
+                        if (newUrl && typeof newUrl === 'string') {
+                            // debugLog('RECONNECT', `Nueva URL obtenida. Intentando conectar a: ${newUrl}`);
+                            // Crear una nueva instancia de WebSocket. Esto pasará de nuevo por nuestro interceptor.
+                            new window.WebSocket(newUrl, protocols);
+                        } else {
+                            // debugLog('ERROR', 'getNewUrlOnReconnect no retornó una URL válida. Abortando reconexión.');
+                             // Reseteamos los intentos si la función falla para no bloquear futuros intentos manuales.
+                             self.reconnectAttempts[reconnectKey] = self.maxReconnectAttempts;
+                        }
+                    } catch (error) {
+                        // debugLog('ERROR', 'Falló la ejecución de getNewUrlOnReconnect:', error);
+                        // Se detienen los intentos si la función para obtener la URL falla.
+                        self.reconnectAttempts[reconnectKey] = self.maxReconnectAttempts;
+                    }
+                }, delay);
+
+            } else {
+                // debugLog('ERROR', `Se alcanzó el número máximo de intentos de reconexión (${self.maxReconnectAttempts}) para ${reconnectKey}.`);
             }
         });
 
         socket.addEventListener('error', (event) => {
-            debugStats.errors++;
-            debugLog('ERROR', `❗️ Error en WebSocket para: ${url}`, event);
+            // debugStats.errors++;
+            // debugLog('ERROR', `❗️ Error en WebSocket para: ${url}`, event);
         });
 
         socket.addEventListener('message', (event) => {
@@ -891,7 +827,6 @@ class WebSocketInterceptor {
     }
 
     resendMessage(message, socketIndex = 0) {
-        // ... (sin cambios en este método)
         if (this.sockets.length > socketIndex) {
             const trackedSocket = this.sockets[socketIndex];
             if (trackedSocket.socket.readyState === this.originalWebSocket.OPEN) {
@@ -1036,17 +971,12 @@ async function initializeEvents() {
 
 
     // --- Inicialización del Interceptor ---
-    const reconnector = new WebSocketReconnector({
-        maxRetries: 5,
-        initialDelay: 2000 // Empezar con 2 segundos de retraso
-    });
 
     // ¡Aquí es donde ocurre la magia!
     // Creamos una instancia de nuestro interceptor y le pasamos nuestra lógica.
     const interceptortiktok = new WebSocketInterceptor({
         urlFilter: (url) => url && url.includes('tiktok.com'),
-        onMessage: handleTikTokMessage,
-        onClose: reconnector.handleDisconnection
+        onMessage: handleTikTokMessage
     });
     
     function handleKickMessage(e,ws){
@@ -1059,7 +989,6 @@ async function initializeEvents() {
       sendToContentScript(event, { event, data: parsedData }, 'KICK_LIVE_EVENT');
       debugLog('MESSAGE', `Mensaje recibido:`, { event, data: parsedData });
     }
-    
     // Instanciar el interceptor
     const kickinterceptor = new WebSocketInterceptor({
         onMessage: handleKickMessage,
