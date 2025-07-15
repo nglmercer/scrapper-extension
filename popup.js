@@ -38,20 +38,52 @@ function initializetabs() {
 
   console.log("tabIds", "openTab", { tabIds, openTab });
 }
-function redirectlistener() {
-  const redirect_input = document.getElementById("uniqueId_channel");
-  redirect_input.value = window.localStorage.getItem("uniqueId_channel") || "";
-  const redirectForm = document.getElementById("redirectForm");
-  if (!redirect_input || !redirectForm) return;
+// --- 1. Renderiza un formulario por cada plataforma ---
+function renderPlatformForm(platformName, labelText) {
+  const container = document.getElementById('platformForms');
 
-  redirectForm.addEventListener("submit", (e) => {
+  const formEl = document.createElement('form');
+  formEl.className = 'redirect-form';         // clase generica
+  formEl.dataset.platform = platformName;     // kick, twitch, tiktok…
+
+  formEl.innerHTML = `
+    <label>
+      <h3>${labelText}</h3>
+      <input type="text" placeholder="Ingresa el nombre del canal">
+    </label>
+    <button class="btn-save" type="submit">Go</button>
+  `;
+
+  container.appendChild(formEl);
+  attachRedirectListener(formEl, platformName); // 2) enganchamos listener
+}
+
+// --- 2. Engancha el listener a un formulario ya renderizado ---
+function attachRedirectListener(formEl, platformName) {
+  const URLS = {
+    kick:   u => `https://kick.com/${u}`,
+    twitch: u => `https://twitch.tv/${u}`,
+    tiktok: u => `https://tiktok.com/@${u}/live`,
+  };
+
+  const input = formEl.querySelector('input');
+
+  // Pre-fill desde localStorage (usamos la misma clave para todos)
+  input.value = localStorage.getItem('uniqueId_channel') || '';
+
+  formEl.addEventListener('submit', e => {
     e.preventDefault();
-    console.log(redirect_input.value);
-    window.localStorage.setItem("uniqueId_channel", redirect_input.value);
-    redirectToTikTok(redirect_input.value);
-    // O abrir en nueva pestaña: window.open(redirect, '_blank');
+    const username = input.value.trim();
+    if (!username) return;
+
+    localStorage.setItem('uniqueId_channel', username);
+    const url = URLS[platformName](username);
+    console.log(url);
+    window.open(url, '_blank');
   });
 }
+
+
 async function redirectToTikTok(value) {
   if (!value) return;
   const urlBase = "https://www.tiktok.com/@{uniqueId}/live";
@@ -183,7 +215,13 @@ function initializeFormOptions() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initializetabs();
-  redirectlistener();
+  // --- 3. Inicialización ---
+  ['kick', 'tiktok'].forEach(p => {
+    renderPlatformForm(
+      p,
+      `Redirigir a un canal (${p.charAt(0).toUpperCase() + p.slice(1)})`
+    );
+  });
   initializeFormOptions();
   const resetButton = document.getElementById("resetButton");
   resetButton.addEventListener("click", () => {
