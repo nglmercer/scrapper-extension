@@ -43,19 +43,29 @@ function renderPlatformForm(platformName, labelText) {
   const container = document.getElementById('platformForms');
 
   const formEl = document.createElement('form');
-  formEl.className = 'redirect-form';         // clase generica
-  formEl.dataset.platform = platformName;     // kick, twitch, tiktok…
+  formEl.className = 'redirect-form';
+  formEl.dataset.platform = platformName;
 
-  formEl.innerHTML = `
-    <label>
-      <h3>${labelText}</h3>
-      <input type="text" placeholder="Ingresa el nombre del canal">
-    </label>
-    <button class="btn-save" type="submit">Go</button>
-  `;
+  const labelEl = document.createElement('label');
+  const h3El = document.createElement('h3');
+  h3El.textContent = labelText; // Uso seguro de textContent
+
+  const inputEl = document.createElement('input');
+  inputEl.type = 'text';
+  inputEl.placeholder = 'Ingresa el nombre del canal';
+
+  const buttonEl = document.createElement('button');
+  buttonEl.className = 'btn-save';
+  buttonEl.type = 'submit';
+  buttonEl.textContent = 'Go';
+
+  labelEl.appendChild(h3El);
+  labelEl.appendChild(inputEl);
+  formEl.appendChild(labelEl);
+  formEl.appendChild(buttonEl);
 
   container.appendChild(formEl);
-  attachRedirectListener(formEl, platformName); // 2) enganchamos listener
+  attachRedirectListener(formEl, platformName);
 }
 
 // --- 2. Engancha el listener a un formulario ya renderizado ---
