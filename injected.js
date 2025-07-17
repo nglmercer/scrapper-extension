@@ -449,9 +449,8 @@ async function decompressGzip(gzipBuffer) {
 // Variable global para almacenar la versión full
 let protobufFull = null;
 
-function waitForProtobuf(maxWaitTime = 10000) {
+function waitForProtobuf(maxWaitTime = 1000) {
     const startTime = Date.now();
-    
     // Polling síncrono más frecuente y preciso
     while (Date.now() - startTime < maxWaitTime) {
         // Verificar si tenemos la versión full disponible PRIMERO
@@ -485,7 +484,7 @@ function waitForProtobuf(maxWaitTime = 10000) {
     
     // Si llegamos aquí, usar lo que tengamos disponible
     console.warn('⚠️ No se encontró protobuf FULL, usando versión disponible');
-    const fallback = protobufFull || protobuf || window.protobuf;
+    const fallback = protobufFull || window.protobuf || protobuf;
     
     if (!fallback) {
         throw new Error('❌ Protobuf no disponible después del timeout');
@@ -837,154 +836,107 @@ window.addEventListener("message", async (event) => {
 })
 // Función principal de inicialización
 // (Aquí iría la definición de la clase WebSocketInterceptor del Paso 1)
-protobuf = waitForProtobuf();
 let lastack = {
   id: 0,
   total: 0
 }
-async function initializeEvents() {
-    debugLog('INIT', 'Script inyectado iniciando...');
+// =================================================================================
+// SECTION 2: LÓGICA ESPECÍFICA PARA TIKTOK
+// =================================================================================
 
+async function initializeTikTok() {
+    debugLog('INIT', 'Iniciando interceptor para TikTok...');
     
-    // Asegurarse de usar la versión correcta
-    const protobufInstance = waitForProtobuf();
-    const newSCHEME = await getProtobufSchema();
-    console.log("newSCHEME", newSCHEME);
-    const parsed = protobufInstance.parse(newSCHEME);
-    const root = parsed.root;
+    protobuf = typeof protobuf === 'undefined' ? await waitForProtobuf(3000) : protobuf;    
+    const root = protobuf.parse(protobufSCHEME).root;
     const WebcastWebsocketMessage = root.lookupType("TikTok.WebcastWebsocketMessage");
     const WebcastResponse = root.lookupType("TikTok.WebcastResponse");
-
     const protoMessageTypes = {
-        'WebcastChatMessage': 'chat',
-        'WebcastGiftMessage': 'gift',
-        'WebcastLikeMessage': 'like',
-        'WebcastMemberMessage': 'member',
-        'WebcastSocialMessage': 'social',
-        'WebcastRoomUserSeqMessage': 'roomUser',
+        'WebcastChatMessage': 'chat', 'WebcastGiftMessage': 'gift',
+        'WebcastLikeMessage': 'like', 'WebcastMemberMessage': 'member',
+        'WebcastSocialMessage': 'social', 'WebcastRoomUserSeqMessage': 'roomUser',
         'WebcastSubNotifyMessage': 'subscribe',
     };
-
-    debugLog('INIT', '✅ Esquema protobuf parseado correctamente');
-
-    // --- Funciones de Lógica de Negocio ---
+    let lastAckId = 0;
 
     function serializeMessage(protoName, obj) {
         return root.lookupType(`TikTok.${protoName}`).encode(obj).finish();
     }
 
-    // VERSIÓN CORREGIDA de deserializeWebsocketMessage
-
     async function deserializeWebsocketMessage(binaryMessage) {
         try {
             const buffer = new Uint8Array(binaryMessage);
-            // 1. Decodificar el contenedor EXTERIOR (el sobre)
             const outerMessage = WebcastWebsocketMessage.decode(buffer);
-
             if (outerMessage.type === 'msg') {
                 let binary = outerMessage.binary;
                 if (binary && binary.length > 2 && binary[0] === 0x1f && binary[1] === 0x8b) {
                     binary = await decompressGzip(binary);
                 }
-                
-                // 2. Decodificar el contenido INTERIOR (la carta)
                 const innerResponse = WebcastResponse.decode(binary);
-                
-                // 3. ¡SOLUCIÓN! Devolver un objeto con AMBAS partes
-                return {
-                    outer: outerMessage, // Contiene el .id y .type
-                    inner: innerResponse // Contiene .messages y .needAck
-                };
+                return { outer: outerMessage, inner: innerResponse };
             }
             return null;
         } catch (error) {
-            debugLog('DECODE', '❌ Error en decodificación:', error);
+            debugLog('DECODE', '❌ Error en decodificación de TikTok:', error);
             return null;
         }
     }
 
-    /**
-     * Esta es la función principal que procesará los mensajes de TikTok.
-     * La pasaremos como callback a nuestro interceptor.
-     * @param {MessageEvent} event - El evento de mensaje original del WebSocket.
-     * @param {WebSocket} ws - La instancia del WebSocket que recibió el mensaje.
-     */
     async function handleTikTokMessage(event, ws) {
         debugStats.messagesReceived++;
-        try {
-            // `result` ahora contiene las propiedades `outer` e `inner`
-            const result = await deserializeWebsocketMessage(event.data);
-            
-            // Verificamos que el resultado y el contenido interno existan
-            if (result && result.inner && result.inner.messages) {
-                debugStats.messagesDecoded++;
-
-                // Procesamos los mensajes de la misma forma que antes
-                result.inner.messages.forEach(msg => {
-                    const eventName = protoMessageTypes[msg.type] || msg.type;
-                    if (eventName) {
-                        try {
-                            const messageProto = root.lookupType(`TikTok.${msg.type}`);
-                            const decodedData = messageProto.decode(msg.binary);
-                            sendToContentScript(eventName, decodedData);
-                            debugStats.messagesSent++;
-                        } catch (err) {
-                            debugLog('MESSAGE', `❌ Error decodificando ${msg.type}:`, err);
-                        }
-                    }
-                });
-
-                // ¡LÓGICA DE ACK CORREGIDA!
-                // Usamos la bandera `needAck` del contenido interior y el `id` del contenedor exterior.
-                if (result.inner.needAck && result.outer.id) {
-                    if (lastack.id === result.outer.id) {
-                        return;
-                    }
-                    lastack.id = result.outer.id;
-                    lastack.total++;
-                    const ackMsg = serializeMessage('WebcastWebsocketAck', {
-                        type: 'ack',
-                        id: result.outer.id // Usamos el ID del sobre
-                    });
-                    ws.send(ackMsg);
-                    debugStats.acksSent++;
-                    debugLog('ACK', `✅ ACK enviado para el id: ${result.outer.id}`);
+        const result = await deserializeWebsocketMessage(event.data);
+        if (result && result.inner && result.inner.messages) {
+            debugStats.messagesDecoded++;
+            result.inner.messages.forEach(msg => {
+                const eventName = protoMessageTypes[msg.type] || msg.type;
+                try {
+                    const decodedData = root.lookupType(`TikTok.${msg.type}`).decode(msg.binary);
+                    sendToContentScript(eventName, decodedData, 'TIKTOK_LIVE_EVENT');
+                    debugStats.messagesSent++;
+                } catch (err) {
+                    debugLog('MESSAGE', `❌ Error decodificando ${msg.type}:`, err);
                 }
+            });
+            if (result.inner.needAck && result.outer.id && result.outer.id !== lastAckId) {
+                lastAckId = result.outer.id;
+                const ackMsg = serializeMessage('WebcastWebsocketAck', { type: 'ack', id: result.outer.id });
+                ws.send(ackMsg);
+                debugStats.acksSent++;
+                debugLog('ACK', `✅ ACK enviado para el id: ${result.outer.id}`);
             }
-        } catch (err) {
-            debugStats.errors++;
-            debugLog('MESSAGE', '❌ Error procesando mensaje:', err);
         }
     }
+    
+    function handleTikTokPing(event, ws) {
+       if (event.data.includes("hi")) {
+           // TikTok espera un 'pong' que es una copia del mensaje 'ping'
+           ws.send(event.data);
+           debugLog('PING', 'Pong enviado a TikTok');
+       }
+    }
 
-
-    // --- Inicialización del Interceptor ---
-
-    // ¡Aquí es donde ocurre la magia!
-    // Creamos una instancia de nuestro interceptor y le pasamos nuestra lógica.
-    const interceptortiktok = new WebSocketInterceptor({
+    // --- Inicialización de Interceptores de TikTok ---
+    new WebSocketInterceptor({
         urlFilter: (url) => url && url.includes('tiktok.com') && url.includes('webcast'),
         onMessage: handleTikTokMessage
     });
-    async function handleTikTokPing(event, ws) {
-        debugStats.messagesReceived++;
-        try {
-            // only seng hi and log response
-            console.log("handleTikTokPing",event.data);
-            if (event.data.includes("hi")) {
-                setTimeout(() => ws.send(event.data), 5000);
-                debugStats.messagesSent++;
-            }
-        } catch (error) {
-            debugStats.errors++;
-            debugLog('MESSAGE', '❌ Error procesando mensaje:', error);
-        }
-    }
-    const urlwsping = 'im-ws-va.tiktok.com';
-    const tiktokwsping = new WebSocketInterceptor({
-        urlFilter: (url) => url && url.includes(urlwsping),
+    
+    new WebSocketInterceptor({
+        urlFilter: (url) => url && url.includes('im-ws-va.tiktok.com'),
         onMessage: handleTikTokPing
-    })
+    });
+
+    debugLog('INIT', '🎉 Interceptores de TikTok inicializados correctamente.');
+}
+
+
+// =================================================================================
+// SECTION 3: LÓGICA ESPECÍFICA PARA KICK
+// =================================================================================
+
+function initializeKick() {
+    debugLog('INIT', 'Iniciando interceptor para Kick...');
+
     function handleKickMessage(e,ws){
       if (!e || typeof e.data !== 'string') {
         return;
@@ -995,21 +947,29 @@ async function initializeEvents() {
       sendToContentScript(event, { event, data: parsedData }, 'KICK_LIVE_EVENT');
       debugLog('MESSAGE', `Mensaje recibido:`, { event, data: parsedData });
     }
-    // Instanciar el interceptor
-    const kickinterceptor = new WebSocketInterceptor({
+
+    new WebSocketInterceptor({
+        urlFilter: (url) => url && (url.includes('pusher.com') || url.includes('pusher.kick.com')),
         onMessage: handleKickMessage,
-        urlFilter: (url) => {
-          return url && url.includes('pusher');
-        }
     });
-
-    debugLog('INIT', '🎉 Interceptor de WebSocket inicializado correctamente',{
-        tiktok: interceptortiktok,
-        tiktokping: tiktokwsping,
-        kick: kickinterceptor
-    });
-
+    
+    debugLog('INIT', '🎉 Interceptor de Kick inicializado correctamente.');
 }
-(()=>{
-    initializeEvents();
-})()
+
+
+// =================================================================================
+// SECTION 4: PUNTO DE ENTRADA PRINCIPAL
+// Ejecuta la inicialización correspondiente según el dominio actual.
+// =================================================================================
+
+(() => {
+    const hostname = window.location.hostname;
+    
+    if (hostname.includes('tiktok.com')) {
+        initializeTikTok();
+    } else if (hostname.includes('kick.com')) {
+        initializeKick();
+    } else {
+        console.log('[Interceptor] Script inyectado en un dominio no compatible:', hostname);
+    }
+})();
