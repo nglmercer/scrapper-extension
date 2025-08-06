@@ -1,6 +1,5 @@
 // injected.js - Este script se ejecuta en el contexto de la página
 
-// Esquema Protobuf embebido
 const protobufSCHEME = `
 syntax = "proto3";
 package TikTok;
@@ -445,11 +444,13 @@ async function decompressGzip(gzipBuffer) {
     }
 }
 
-// Función para esperar a que protobuf esté disponible
 // Variable global para almacenar la versión full
 let protobufFull = null;
 
 function waitForProtobuf(maxWaitTime = 1000) {
+  try {
+
+  
     const startTime = Date.now();
     // Polling síncrono más frecuente y preciso
     while (Date.now() - startTime < maxWaitTime) {
@@ -497,6 +498,11 @@ function waitForProtobuf(maxWaitTime = 1000) {
     });
     
     return fallback;
+  } catch (e){
+    debugLog('WAIT', '❌ Error en waitForProtobuf:', e);
+    return null;
+
+  }
 }
 
 
@@ -847,7 +853,7 @@ let lastack = {
 async function initializeTikTok() {
     debugLog('INIT', 'Iniciando interceptor para TikTok...');
     
-    protobuf = typeof protobuf === 'undefined' ? await waitForProtobuf(3000) : protobuf;    
+    var protobuf = typeof protobuf === 'undefined' ? await waitForProtobuf(1000) : protobuf;    
     const root = protobuf.parse(protobufSCHEME).root;
     const WebcastWebsocketMessage = root.lookupType("TikTok.WebcastWebsocketMessage");
     const WebcastResponse = root.lookupType("TikTok.WebcastResponse");
