@@ -466,16 +466,6 @@ function waitForProtobuf(maxWaitTime = 1000) {
             debugLog('WAIT', '✅ Usando protobuf FULL previamente guardado');
             return protobufFull;
         }
-        
-        // Verificar protobuf global
-        if (typeof protobuf !== 'undefined' && protobuf.parse) {
-            if (protobuf.build === 'full') {
-                protobufFull = protobuf;
-                debugLog('WAIT', '✅ Protobuf FULL encontrado en variable global');
-                return protobufFull;
-            }
-        }
-        
         // Polling cada 50ms para mayor precisión
         const now = Date.now();
         while (Date.now() - now < 50) {
@@ -485,7 +475,7 @@ function waitForProtobuf(maxWaitTime = 1000) {
     
     // Si llegamos aquí, usar lo que tengamos disponible
     console.warn('⚠️ No se encontró protobuf FULL, usando versión disponible');
-    const fallback = protobufFull || window.protobuf || protobuf;
+    const fallback = protobufFull || window.protobuf;
     
     if (!fallback) {
         throw new Error('❌ Protobuf no disponible después del timeout');
