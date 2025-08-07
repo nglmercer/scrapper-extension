@@ -447,7 +447,7 @@ async function decompressGzip(gzipBuffer) {
 // Variable global para almacenar la versión full
 let protobufFull = null;
 
-function waitForProtobuf(maxWaitTime = 1000) {
+function waitForProtobuf(maxWaitTime = 3000) {
   try {
 
   
@@ -843,7 +843,8 @@ let lastack = {
 async function initializeTikTok() {
     debugLog('INIT', 'Iniciando interceptor para TikTok...');
     
-    var protobuf = typeof protobuf === 'undefined' ? await waitForProtobuf(1000) : protobuf;    
+    var protobuf = typeof protobuf === 'undefined' ? await waitForProtobuf(2000) : protobuf; 
+    if (!protobuf || !protobuf.parse) await waitForProtobuf(5000)
     const root = protobuf.parse(protobufSCHEME).root;
     const WebcastWebsocketMessage = root.lookupType("TikTok.WebcastWebsocketMessage");
     const WebcastResponse = root.lookupType("TikTok.WebcastResponse");
