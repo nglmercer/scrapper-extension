@@ -6,7 +6,7 @@
     }
   },
   "name": "MultiStream Live Interceptor",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Intercepta y decodifica mensajes de TikTok Live",
   "permissions": [
     "activeTab",
@@ -15,7 +15,8 @@
   ],
   "host_permissions": [
     "https://www.tiktok.com/*",
-    "https://live.tiktok.com/*"
+    "https://kick.com/*",
+    "https://www.twitch.tv/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -28,13 +29,16 @@
     }
   },
   "content_scripts": [{ 
-    "matches": ["https://www.tiktok.com/*","https://kick.com/*"],
+    "matches": ["https://www.tiktok.com/*","https://kick.com/*","https://www.twitch.tv/*"],
+
     "js": ["protobuf.min.js", "content.js"],
     "run_at": "document_start"
   }],
   "web_accessible_resources": [{
     "resources": ["injected.js", "protobuf.min.js","data.proto"],
-    "matches": ["https://www.tiktok.com/*", "https://live.tiktok.com/*","https://kick.com/*"]
+    "matches": ["https://www.tiktok.com/*","https://kick.com/*","https://www.twitch.tv/*"]
+
+
   }],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"

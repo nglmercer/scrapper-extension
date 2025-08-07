@@ -952,11 +952,275 @@ function initializeKick() {
     debugLog('INIT', '🎉 Interceptor de Kick inicializado correctamente.');
 }
 
+function initializeTwitch() {
+    debugLog('INIT', 'Iniciando interceptor para Twitch...');
+    const wsTWITCH = 'irc-ws.chat.twitch.tv';
+    function handleTwitchMessage(e,ws){
+      if (!e || typeof e.data !== 'string') {
+        return;
+      }
+      debugStats.messagesReceived++;
+      const parsedData = parseTwitchIRC(e.data);
+      sendToContentScript(parsedData.type, { event:parsedData.type, data: parsedData }, 'TWITCH_LIVE_EVENT');
+      debugLog('MESSAGE', `Mensaje recibido:`, { event:parsedData.type, data: parsedData });
+    }
+    new WebSocketInterceptor({
+        urlFilter: (url) => url && url.includes(wsTWITCH),
+        onMessage: handleTwitchMessage,
+    });
 
-// =================================================================================
-// SECTION 4: PUNTO DE ENTRADA PRINCIPAL
-// Ejecuta la inicialización correspondiente según el dominio actual.
-// =================================================================================
+  
+}
+function parseTwitchIRC(rawMessage) {
+    // Limpiar \r\n del final
+    const cleanMessage = rawMessage.replace(/\r\n$/, '');
+    
+    const result = {
+        raw: rawMessage,
+        tags: {},
+        prefix: null,
+        username: null,
+        host: null,
+        command: null,
+        params: [],
+        channel: null,
+        message: null
+    };
+    
+    let position = 0;
+    
+    // 1. Parsear tags (si existen, empiezan con @)
+    if (cleanMessage.startsWith('@')) {
+        const spaceIndex = cleanMessage.indexOf(' ');
+        if (spaceIndex === -1) return result;
+        
+        const tagsPart = cleanMessage.substring(1, spaceIndex);
+        
+        tagsPart.split(';').forEach(tag => {
+            const equalIndex = tag.indexOf('=');
+            if (equalIndex === -1) {
+                result.tags[tag] = '';
+                return;
+            }
+            
+            const key = tag.substring(0, equalIndex);
+            let value = tag.substring(equalIndex + 1);
+            
+            // Decodificar valores especiales de Twitch
+            value = value.replace(/\\s/g, ' ');
+            value = value.replace(/\\:/g, ';');
+            value = value.replace(/\\n/g, '\n');
+            value = value.replace(/\\r/g, '\r');
+            value = value.replace(/\\\\/g, '\\');
+            
+            result.tags[key] = value;
+        });
+        
+        position = spaceIndex + 1;
+    }
+    
+    // 2. Parsear prefix/source (si existe, empieza con :)
+    if (cleanMessage[position] === ':') {
+        const spaceIndex = cleanMessage.indexOf(' ', position);
+        if (spaceIndex === -1) return result;
+        
+        result.prefix = cleanMessage.substring(position + 1, spaceIndex);
+        
+        // Extraer username y host del prefix
+        if (result.prefix.includes('!')) {
+            const exclamIndex = result.prefix.indexOf('!');
+            result.username = result.prefix.substring(0, exclamIndex);
+            
+            const atIndex = result.prefix.indexOf('@');
+            if (atIndex !== -1) {
+                result.host = result.prefix.substring(atIndex + 1);
+            }
+        } else if (result.prefix.includes('.')) {
+            // Es un servidor
+            result.host = result.prefix;
+        } else {
+            // Solo nickname
+            result.username = result.prefix;
+        }
+        
+        position = spaceIndex + 1;
+    }
+    
+    // 3. Parsear comando y parámetros
+    const remaining = cleanMessage.substring(position);
+    const parts = remaining.split(' ');
+    
+    if (parts.length === 0) return result;
+    result.command = parts[0];
+    
+    // 4. Parsear parámetros
+    for (let i = 1; i < parts.length; i++) {
+        if (parts[i].startsWith(':')) {
+            // El resto es el mensaje final
+            result.message = parts.slice(i).join(' ').substring(1);
+            break;
+        }
+        result.params.push(parts[i]);
+    }
+    
+    // 5. Identificar canal
+    if (['PRIVMSG', 'NOTICE', 'USERNOTICE', 'CLEARCHAT', 'CLEARMSG', 'HOSTTARGET'].includes(result.command)) {
+        result.channel = result.params[0];
+    } else if (result.command === 'JOIN') {
+        result.channel = result.params[0] || result.message;
+    } else if (result.command === 'PART') {
+        result.channel = result.params[0];
+    }
+    
+    // 6. Identificar tipo de mensaje
+    switch (result.command) {
+        case 'PRIVMSG':
+            result.type = 'message';
+            break;
+        case 'USERNOTICE':
+            result.type = 'usernotice';
+            result.systemMessage = result.tags['system-msg'];
+            break;
+        case 'NOTICE':
+            result.type = 'notice';
+            result.msgId = result.tags['msg-id'];
+            break;
+        case 'CLEARCHAT':
+            result.type = 'clearchat';
+            result.targetUser = result.message;
+            result.banDuration = result.tags['ban-duration'];
+            break;
+        case 'CLEARMSG':
+            result.type = 'clearmsg';
+            result.targetMsgId = result.tags['target-msg-id'];
+            break;
+        case 'HOSTTARGET':
+            result.type = 'hosttarget';
+            if (result.message) {
+                const hostInfo = result.message.split(' ');
+                result.hostTarget = hostInfo[0] === '-' ? null : hostInfo[0];
+                result.hostViewers = hostInfo[1] ? parseInt(hostInfo[1]) : 0;
+            }
+            break;
+        case 'RECONNECT':
+            result.type = 'reconnect';
+            break;
+        case 'PING':
+            result.type = 'ping';
+            break;
+        case 'PONG':
+            result.type = 'pong';
+            break;
+        case 'CAP':
+            result.type = 'unknown';
+            break;
+        case '001':
+        case '002':
+        case '003':
+        case '004':
+        case '353':
+        case '366':
+        case '372':
+        case '375':
+        case '376':
+            result.type = 'server';
+            break;
+        case 'JOIN':
+            result.type = 'join';
+            break;
+        case 'PART':
+            result.type = 'part';
+            break;
+        case 'ROOMSTATE':
+            result.type = 'roomstate';
+            break;
+        default:
+            result.type = 'unknown';
+    }
+    
+    // 7. Parsear información adicional de los tags
+    if (result.tags && Object.keys(result.tags).length > 0) {
+        // Información del usuario
+        result.userId = result.tags['user-id'] || undefined;
+        result.displayName = result.tags['display-name'] || undefined;
+        result.userColor = result.tags.color || undefined;
+        result.userType = result.tags['user-type'] || undefined;
+        result.mod = result.tags.mod === '1';
+        result.subscriber = result.tags.subscriber === '1';
+        result.turbo = result.tags.turbo === '1';
+        result.vip = result.tags.vip === '1';
+        
+        // Información del mensaje
+        result.messageId = result.tags.id || undefined;
+        result.timestamp = result.tags['tmi-sent-ts'] ? 
+            new Date(parseInt(result.tags['tmi-sent-ts'])) : null;
+        
+        // Badges
+        if (result.tags.badges && result.tags.badges !== '') {
+            result.badges = {};
+            result.tags.badges.split(',').forEach(badge => {
+                const slashIndex = badge.indexOf('/');
+                if (slashIndex !== -1) {
+                    const name = badge.substring(0, slashIndex);
+                    const version = badge.substring(slashIndex + 1);
+                    result.badges[name] = version;
+                }
+            });
+        }
+        
+        // Emotes
+        if (result.tags.emotes && result.tags.emotes !== '') {
+            result.emotes = [];
+            result.tags.emotes.split('/').forEach(emoteData => {
+                const colonIndex = emoteData.indexOf(':');
+                if (colonIndex !== -1) {
+                    const id = emoteData.substring(0, colonIndex);
+                    const positions = emoteData.substring(colonIndex + 1);
+                    positions.split(',').forEach(pos => {
+                        const dashIndex = pos.indexOf('-');
+                        if (dashIndex !== -1) {
+                            const start = parseInt(pos.substring(0, dashIndex));
+                            const end = parseInt(pos.substring(dashIndex + 1));
+                            result.emotes.push({ id, start, end });
+                        }
+                    });
+                }
+            });
+        }
+    } else {
+        // Valores por defecto cuando no hay tags
+        result.userId = undefined;
+        result.displayName = undefined;
+        result.userColor = undefined;
+        result.userType = undefined;
+        result.mod = false;
+        result.subscriber = false;
+        result.turbo = false;
+        result.vip = false;
+        result.messageId = undefined;
+        result.timestamp = null;
+    }
+    
+    return result;
+}
+
+// Función para manejar múltiples mensajes concatenados
+function parseMultipleTwitchIRC(rawMessages) {
+    const messages = rawMessages.split(/\r?\n/).filter(msg => msg.trim() !== '');
+    return messages.map(msg => parseTwitchIRC(msg + '\r\n'));
+}
+
+// Función helper para verificar si el usuario es broadcaster
+function isBroadcaster(parsedMessage) {
+    return parsedMessage.badges && parsedMessage.badges.broadcaster;
+}
+
+// Función helper para verificar si el usuario tiene permisos de moderador+
+function hasModPrivileges(parsedMessage) {
+    return parsedMessage.mod || 
+           isBroadcaster(parsedMessage) || 
+           (parsedMessage.badges && parsedMessage.badges.broadcaster);
+}
 
 (() => {
     const hostname = window.location.hostname;
@@ -965,6 +1229,8 @@ function initializeKick() {
         initializeTikTok();
     } else if (hostname.includes('kick.com')) {
         initializeKick();
+    } else if (hostname.includes('twitch.tv')) {
+        initializeTwitch();
     } else {
         console.log('[Interceptor] Script inyectado en un dominio no compatible:', hostname);
     }
