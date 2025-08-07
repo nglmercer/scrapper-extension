@@ -843,8 +843,12 @@ let lastack = {
 async function initializeTikTok() {
     debugLog('INIT', 'Iniciando interceptor para TikTok...');
     
-    var protobuf = typeof protobuf === 'undefined' ? await waitForProtobuf(2000) : protobuf; 
-    if (!protobuf || !protobuf.parse) await waitForProtobuf(5000)
+    var protobuf = await waitForProtobuf(1000) || protobufFull;
+    if (typeof protobuf.parse !== 'function') protobuf = await waitForProtobuf(5000) || protobufFull;
+    console.log("protobuf",{
+      protobuf,
+      protobufFull
+    }) 
     const root = protobuf.parse(protobufSCHEME).root;
     const WebcastWebsocketMessage = root.lookupType("TikTok.WebcastWebsocketMessage");
     const WebcastResponse = root.lookupType("TikTok.WebcastResponse");
@@ -908,7 +912,7 @@ async function initializeTikTok() {
        if (event.data.includes("hi")) {
            // TikTok espera un 'pong' que es una copia del mensaje 'ping'
            ws.send(event.data);
-           debugLog('PING', 'Pong enviado a TikTok');
+           console.log("send handleTikTokPing")
        }
     }
 
