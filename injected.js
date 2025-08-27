@@ -502,6 +502,7 @@ function setupProtobufProtection() {
     if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse) {
         protobufFull = window.protobuf;
         console.log('🔒 Protobuf FULL inicial guardado');
+
     }
     
     // Observar cambios en el DOM para detectar nuevos scripts
@@ -514,6 +515,7 @@ function setupProtobufProtection() {
                         requestAnimationFrame(() => {
                             if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse && !protobufFull) {
                                 protobufFull = window.protobuf;
+                                initializeTikTok(); // Inicializar TikTok si no se ha hecho ya
                                 console.log('🔒 Protobuf FULL capturado via MutationObserver');
                             }
                         });
@@ -529,8 +531,7 @@ function setupProtobufProtection() {
     return observer;
 }
 
-// Inicializar protección al cargar
-setupProtobufProtection();
+
 /**
  * Intenta parsear un valor a JSON de forma segura, con correcciones automáticas
  * @param {*} value - El valor a parsear
@@ -844,12 +845,19 @@ async function initializeTikTok() {
     debugLog('INIT', 'Iniciando interceptor para TikTok...');
     
     var protobuf = await waitForProtobuf(1000) || protobufFull;
-    if (typeof protobuf.parse !== 'function') protobuf = await waitForProtobuf(5000) || protobufFull;
-    console.log("protobuf",{
-      protobuf,
-      protobufFull
-    }) 
-    const root = protobuf.parse(protobufSCHEME).root;
+    let root = null;
+    if (protobuf && typeof protobuf.parse === 'function') {
+        root = protobuf.parse(protobufSCHEME).root;
+    } else if (protobufFull && typeof protobufFull.parse === 'function') {
+        root = protobufFull.parse(protobufSCHEME).root;
+    } else {
+        debugLog('WAIT', '❌ No se pudo obtener una versión de protobuf con .parse. Deteniendo inicialización de TikTok.');
+        return;
+    }
+    console.log("PROTOBUF",{
+        protobuf,
+        root
+    })
     const WebcastWebsocketMessage = root.lookupType("TikTok.WebcastWebsocketMessage");
     const WebcastResponse = root.lookupType("TikTok.WebcastResponse");
     const protoMessageTypes = {
@@ -1231,7 +1239,7 @@ function hasModPrivileges(parsedMessage) {
     const hostname = window.location.hostname;
     
     if (hostname.includes('tiktok.com')) {
-        initializeTikTok();
+        setupProtobufProtection();
     } else if (hostname.includes('kick.com')) {
         initializeKick();
     } else if (hostname.includes('twitch.tv')) {
