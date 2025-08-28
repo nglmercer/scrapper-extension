@@ -56,7 +56,7 @@ function injectScript() {
 async function postJSON(url, data, options = {}) {
   const {
     headers = {},
-    timeout = 30000,
+    timeout = 5000,
     bearerToken,
     basicAuth
   } = options;
