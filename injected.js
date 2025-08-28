@@ -502,7 +502,7 @@ function setupProtobufProtection() {
     if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse) {
         protobufFull = window.protobuf;
         console.log('🔒 Protobuf FULL inicial guardado');
-
+         initializeTikTok();
     }
     
     // Observar cambios en el DOM para detectar nuevos scripts
@@ -515,7 +515,7 @@ function setupProtobufProtection() {
                         requestAnimationFrame(() => {
                             if (window.protobuf && window.protobuf.build === 'full' && window.protobuf.parse && !protobufFull) {
                                 protobufFull = window.protobuf;
-                                initializeTikTok(); // Inicializar TikTok si no se ha hecho ya
+                                initializeTikTok();
                                 console.log('🔒 Protobuf FULL capturado via MutationObserver');
                             }
                         });
