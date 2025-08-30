@@ -11,12 +11,17 @@
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.tiktok.com/*",
     "https://kick.com/*",
-    "https://www.twitch.tv/*"
+    "https://www.twitch.tv/*",
+    "https://dashboard.kick.com/*",
+    "https://livecenter.tiktok.com/*",
+    "https://*/*",
+    "http://*/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -28,17 +33,30 @@
       "256": "./icons/icon-256.png"
     }
   },
-  "content_scripts": [{ 
-    "matches": ["https://www.tiktok.com/*","https://kick.com/*","https://www.twitch.tv/*"],
-
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [{
+    "matches": [
+      "https://www.tiktok.com/*",
+      "https://kick.com/*",
+      "https://www.twitch.tv/*",
+      "https://dashboard.kick.com/*",
+      "https://livecenter.tiktok.com/*"
+    ],
     "js": ["protobuf.min.js", "content.js"],
     "run_at": "document_start"
   }],
   "web_accessible_resources": [{
-    "resources": ["injected.js", "protobuf.min.js","data.proto"],
-    "matches": ["https://www.tiktok.com/*","https://kick.com/*","https://www.twitch.tv/*"]
-
-
+    "resources": ["injected.js", "protobuf.min.js", "data.proto"],
+    "matches": [
+      "https://www.tiktok.com/*",
+      "https://kick.com/*",
+      "https://www.twitch.tv/*",
+      "https://dashboard.kick.com/*",
+      "https://livecenter.tiktok.com/*"
+    ]
   }],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"

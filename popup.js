@@ -222,7 +222,29 @@ function resetOptions(arrayStrings) {
 function initializeFormOptions() {
   optionsConfig.forEach(setupOptionListeners);
 }
+const popupPorts = new Set();
 
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "popup") {
+    popupPorts.add(port);
+    port.onDisconnect.addListener(() => {
+      popupPorts.delete(port);
+    });
+  }
+});
+// Recibir mensajes de content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type) {
+    // Reenviar a todos los popups conectados
+    popupPorts.forEach(port => {
+      try {
+        port.postMessage(message);
+      } catch (error) {
+        popupPorts.delete(port);
+      }
+    });
+  }
+});
 document.addEventListener("DOMContentLoaded", () => {
   initializetabs();
   // --- 3. Inicialización ---

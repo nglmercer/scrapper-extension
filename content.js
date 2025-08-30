@@ -293,40 +293,71 @@ async function getProtobufSchema(schemaPath = "data.proto") {
     }, 10000);
 })();
 let newWindow = false;
-window.addEventListener('message',async (event) => {
-    // Solo procesar mensajes de nuestro origen
-    if (event.source !== window || !event.data.type) return;
+// content.js - Script actualizado para comunicarse con background
+
+window.addEventListener('message', async (event) => {
+  const now = Date.now();
+  
+  // Solo procesar mensajes de nuestro origen
+  if (event.source !== window || !event.data.type) return;
+  
+  if (
+    event.data.type === 'TIKTOK_LIVE_EVENT' ||
+    event.data.type === 'KICK_LIVE_EVENT' ||
+    event.data.type === 'TWITCH_LIVE_EVENT'
+  ) {
     
-    if (event.data.type === 'TIKTOK_LIVE_EVENT' || event.data.type === 'KICK_LIVE_EVENT' || event.data.type === 'TWITCH_LIVE_EVENT') {
-
-        const now = Date.now();
-        if ( WebhookUrl && WebhookOption){
-            const result = await postJSON(WebhookUrl, event.data.payload);
-            console.log("result",result,{ WebhookUrl, WebhookOption });
+    console.log('Evento recibido desde página:', event.data.payload);
+    
+    try {
+      // Enviar al background script (service worker)
+      // Este SIEMPRE está disponible y puede hacer fetch sin restricciones CORS
+      const response = await chrome.runtime.sendMessage({
+        type: event.data.type,
+        payload: {
+          ...event.data.payload,
+          timestamp: now,
+          url: window.location.href, // Incluir la URL de origen
+          platform: detectPlatform() // Detectar plataforma automáticamente
         }
-        if (!newWindow){
-          if (!WindowUrl || !OpenWindow){
-            console.log("newWindow",newWindow,{ WindowUrl,OpenWindow });
-            return;
-          }
-            const newWindowUrl = WindowUrl;
-            newWindow = window.open(newWindowUrl);
-        } else {
-          if (!newWindow || newWindow.closed) {
-            console.log("newWindow",newWindow,{ WindowUrl,OpenWindow });
-            return;
-          }
-            newWindow.postMessage({
-                type: event.data.type,
-                payload: {
-                   ...event.data.payload,
-                }
-            }, '*');
-        }
-        console.log('Evento recibido desde página:', event.data.payload,now.toString());
-        // Enviar al background script o procesar aquí
-
+      });
+      
+      console.log('Mensaje enviado al background:', response);
+      
+    } catch (error) {
+      console.error('Error enviando mensaje al background:', error);
     }
+  }
+});
+
+// Función auxiliar para detectar la plataforma
+function detectPlatform() {
+  const hostname = window.location.hostname.toLowerCase();
+  
+  if (hostname.includes('tiktok.com')) return 'tiktok';
+  if (hostname.includes('kick.com')) return 'kick';
+  if (hostname.includes('twitch.tv')) return 'twitch';
+  if (hostname.includes('youtube.com')) return 'youtube';
+  
+  return 'unknown';
+}
+
+// Escuchar mensajes del background (para la ventana nueva)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'TIKTOK_LIVE_EVENT' || 
+      message.type === 'KICK_LIVE_EVENT' || 
+      message.type === 'TWITCH_LIVE_EVENT') {
+    
+    // Si esta página es la ventana nueva, procesar el evento
+    console.log('Mensaje recibido del background:', message);
+    
+    // Aquí puedes agregar lógica específica para la ventana nueva
+    // Por ejemplo, mostrar notificaciones, actualizar UI, etc.
+    
+    sendResponse({ received: true });
+  }
+  
+  return true; // Mantener el canal abierto para respuestas asíncronas
 });
 
 // Inyectar cuando el DOM esté listo
