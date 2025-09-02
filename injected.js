@@ -684,7 +684,7 @@ function parseJsonSilent(jsonString) {
  * Es configurable para apuntar a URLs específicas y manejar mensajes con lógica personalizada.
  */ 
 
-class WebSocketInterceptor {
+var WebSocketInterceptorClass = class WebSocketInterceptor {
     /**
      * @param {object} options - Opciones de configuración.
      ** @param {function(string): boolean} options.urlFilter - Función que retorna true si la URL debe ser interceptada.
@@ -695,7 +695,7 @@ class WebSocketInterceptor {
      */
     constructor(options) {
         if (!options || typeof options.urlFilter !== 'function' || typeof options.onMessage !== 'function') {
-            throw new Error('WebSocketInterceptor requiere las opciones "urlFilter" y "onMessage".');
+            throw new Error('wsIntercetor requiere las opciones "urlFilter" y "onMessage".');
         }
         this.options = options;
         this.originalWebSocket = window.WebSocket;
@@ -707,7 +707,7 @@ class WebSocketInterceptor {
         this.reconnectAttempts = {};
 
         this.intercept();
-        // debugLog('INIT', 'WebSocketInterceptor listo y configurado.'); // Suponiendo que tienes una función debugLog
+        // debugLog('INIT', 'wsIntercetor listo y configurado.'); // Suponiendo que tienes una función debugLog
     }
 
     intercept() {
@@ -832,7 +832,7 @@ window.addEventListener("message", async (event) => {
     }
 })
 // Función principal de inicialización
-// (Aquí iría la definición de la clase WebSocketInterceptor del Paso 1)
+// (Aquí iría la definición de la clase wsInterceptor del Paso 1)
 let lastack = {
   id: 0,
   total: 0
@@ -925,12 +925,12 @@ async function initializeTikTok() {
     }
 
     // --- Inicialización de Interceptores de TikTok ---
-    new WebSocketInterceptor({
+    new WebSocketInterceptorClass({
         urlFilter: (url) => url && url.includes('tiktok.com') && url.includes('webcast'),
         onMessage: handleTikTokMessage
     });
     
-    new WebSocketInterceptor({
+    new WebSocketInterceptorClass({
         urlFilter: (url) => url && url.includes('im-ws-va.tiktok.com'),
         onMessage: handleTikTokPing
     });
@@ -957,7 +957,7 @@ function initializeKick() {
       debugLog('MESSAGE', `Mensaje recibido:`, { event, data: parsedData });
     }
 
-    new WebSocketInterceptor({
+    new WebSocketInterceptorClass({
         urlFilter: (url) => url && (url.includes('pusher.com') || url.includes('pusher.kick.com')),
         onMessage: handleKickMessage,
     });
@@ -977,7 +977,7 @@ function initializeTwitch() {
       sendToContentScript(parsedData.type, { event:parsedData.type, data: parsedData }, 'TWITCH_LIVE_EVENT');
       debugLog('MESSAGE', `Mensaje recibido:`, { event:parsedData.type, data: parsedData });
     }
-    new WebSocketInterceptor({
+    new WebSocketInterceptorClass({
         urlFilter: (url) => url && url.includes(wsTWITCH),
         onMessage: handleTwitchMessage,
     });

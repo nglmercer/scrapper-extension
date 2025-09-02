@@ -40,106 +40,6 @@ function injectScript() {
 
 }
 
-
-
-/**
- * Función simple para hacer peticiones POST con JSON
- * @param {string} url - URL del endpoint
- * @param {Object} data - Objeto JSON a enviar
- * @param {Object} options - Opciones adicionales
- * @param {Object} options.headers - Headers adicionales
- * @param {number} options.timeout - Timeout en milisegundos (default: 30000)
- * @param {string} options.bearerToken - Token de autorización Bearer
- * @param {Object} options.basicAuth - Autenticación básica {username, password}
- * @returns {Promise<Object>} - Respuesta de la petición
- */
-async function postJSON(url, data, options = {}) {
-  const {
-    headers = {},
-    timeout = 5000,
-    bearerToken,
-    basicAuth
-  } = options;
-
-  // Construir headers
-  const finalHeaders = {
-    'Content-Type': 'application/json',
-    ...headers
-  };
-
-  // Agregar autenticación si se proporciona
-  if (bearerToken) {
-    finalHeaders['Authorization'] = `Bearer ${bearerToken}`;
-  }
-
-  if (basicAuth && basicAuth.username && basicAuth.password) {
-    const credentials = btoa(`${basicAuth.username}:${basicAuth.password}`);
-    finalHeaders['Authorization'] = `Basic ${credentials}`;
-  }
-
-  // Configurar AbortController para timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: finalHeaders,
-      body: JSON.stringify(data),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    // Parsear respuesta
-    let responseData;
-    const contentType = response.headers.get('content-type') || '';
-    
-    if (contentType.includes('application/json')) {
-      responseData = await response.json();
-    } else {
-      responseData = await response.text();
-    }
-
-    return {
-      success: response.ok,
-      status: response.status,
-      statusText: response.statusText,
-      data: responseData,
-      headers: Object.fromEntries(response.headers)
-    };
-
-  } catch (error) {
-    clearTimeout(timeoutId);
-    
-    let errorMessage = 'Error desconocido';
-    if (error.name === 'AbortError') {
-      errorMessage = `Request timed out after ${timeout}ms`;
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-
-    return {
-      success: false,
-      status: 0,
-      statusText: 'Error',
-      data: null,
-      error: errorMessage
-    };
-  }
-}
-
-// Ejemplos de uso:
-
-// 1. POST básico
-/*
-const result = await postJSON('https://api.example.com/users', {
-  name: 'Juan',
-  email: 'juan@example.com'
-});
-
-console.log(result);
-*/
 // Escuchar mensajes del script inyectado
 async function getProtobufSchema(schemaPath = "data.proto") {
     try {
@@ -321,15 +221,12 @@ window.addEventListener('message', async (event) => {
           platform: detectPlatform() // Detectar plataforma automáticamente
         }
       });
-      
-      console.log('Mensaje enviado al background:', response);
-      
+      console.log('Mensaje enviado al background:', response,WindowUrl,window.location.origin);
     } catch (error) {
       console.error('Error enviando mensaje al background:', error);
     }
   }
 });
-
 // Función auxiliar para detectar la plataforma
 function detectPlatform() {
   const hostname = window.location.hostname.toLowerCase();
@@ -344,19 +241,18 @@ function detectPlatform() {
 
 // Escuchar mensajes del background (para la ventana nueva)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Si esta página es la ventana nueva, procesar el evento
+  
+  // Aquí puedes agregar lógica específica para la ventana nueva
+  // Por ejemplo, mostrar notificaciones, actualizar UI, etc.
+/*   console.log('Mensaje recibido del background:', message);
+  console.log("window.location.origin",window.location.origin) */
   if (message.type === 'TIKTOK_LIVE_EVENT' || 
       message.type === 'KICK_LIVE_EVENT' || 
       message.type === 'TWITCH_LIVE_EVENT') {
     
-    // Si esta página es la ventana nueva, procesar el evento
-    console.log('Mensaje recibido del background:', message);
-    
-    // Aquí puedes agregar lógica específica para la ventana nueva
-    // Por ejemplo, mostrar notificaciones, actualizar UI, etc.
-    
     sendResponse({ received: true });
   }
-  
   return true; // Mantener el canal abierto para respuestas asíncronas
 });
 

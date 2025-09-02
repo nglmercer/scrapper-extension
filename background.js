@@ -67,66 +67,125 @@ async function sendWebhook(url, data) {
   }
 }
 
-// Manejar ventana nueva
-async function handleNewWindow(eventData) {
-  if (!OpenWindow || !WindowUrl) {
-    console.log('Ventana nueva deshabilitada');
-    return;
-  }
+let chatTabId = null;
+let tabCreationPromise = null; // ¡Esta es la clave! Nuestra promesa "bloqueadora".
 
-  try {
-    if (!newWindow) {
-      // Crear nueva ventana
-      const window = await chrome.windows.create({
-        url: WindowUrl,
-        type: 'normal',
-        width: 800,
-        height: 600
-      });
-      
-      newWindow = window;
-      console.log('Nueva ventana creada:', window.id);
-      
-      // Enviar datos cuando la ventana esté lista
-      setTimeout(() => {
-        chrome.tabs.query({ windowId: window.id }, (tabs) => {
-          if (tabs[0]) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              type: eventData.type,
-              payload: eventData.payload
-            }).catch(err => console.log('Mensaje no enviado aún:', err.message));
-          }
-        });
-      }, 2000);
-      
-    } else {
-      // Verificar si la ventana sigue abierta
-      try {
-        await chrome.windows.get(newWindow.id);
-        
-        // Enviar mensaje a las pestañas de la ventana
-        chrome.tabs.query({ windowId: newWindow.id }, (tabs) => {
-          tabs.forEach(tab => {
-            chrome.tabs.sendMessage(tab.id, {
-              type: eventData.type,
-              payload: eventData.payload
-            }).catch(err => console.log('Error enviando mensaje a pestaña:', err.message));
-          });
-        });
-        
-      } catch (error) {
-        // La ventana fue cerrada, crear una nueva
-        console.log('Ventana cerrada, creando nueva...');
-        newWindow = null;
-        handleNewWindow(eventData); // Recursión para crear nueva ventana
-      }
+/**
+ * Función principal que se dispara con cada evento.
+ * Su única responsabilidad es orquestar la obtención de la pestaña y el envío del mensaje.
+ * @param {object} eventData - Los datos a enviar a la pestaña.
+ */
+async function handleNewWindow(eventData) {
+    if (!OpenWindow || !WindowUrl) {
+        console.log('Opción de ventana/pestaña nueva deshabilitada.');
+        return;
     }
-    
-  } catch (error) {
-    console.error('Error manejando ventana:', error);
-    newWindow = null;
-  }
+
+    try {
+        console.log('Evento recibido. Obteniendo o creando la pestaña de chat...');
+        // Esta función es ahora la responsable de manejar la lógica de creación/reutilización.
+        // Todas las llamadas concurrentes a handleNewWindow esperarán aquí a la misma promesa.
+        const tabId = await getOrCreateChatTab();
+        
+        console.log(`Pestaña lista con ID: ${tabId}. Enviando mensaje.`);
+        sendMessageToTab(tabId, eventData);
+
+    } catch (error) {
+        console.error('Error final en el flujo de manejo de la pestaña:', error);
+        // El reseteo del estado se maneja dentro de getOrCreateChatTab,
+        // por lo que aquí solo informamos del error.
+    }
 }
+
+/**
+ * Obtiene el ID de una pestaña de chat existente o crea una nueva.
+ * Es "idempotente" y a prueba de condiciones de carrera.
+ * @returns {Promise<number>} Una promesa que se resuelve con el ID de la pestaña.
+ */
+function getOrCreateChatTab() {
+    // ---- PASO 1: Bloqueo ----
+    // Si ya hay una operación de creación en curso, no hacemos nada nuevo.
+    // Simplemente devolvemos la promesa existente para que la nueva llamada espere.
+    if (tabCreationPromise) {
+        console.log('Una operación de creación de pestaña ya está en curso. Esperando su resultado...');
+        return tabCreationPromise;
+    }
+
+    // ---- PASO 2: Iniciar Operación ----
+    // Si no hay ninguna operación en curso, creamos una nueva promesa y la guardamos.
+    // Esto "bloquea" instantáneamente a cualquier otra llamada que llegue después de esta línea.
+    tabCreationPromise = new Promise(async (resolve, reject) => {
+        try {
+            const tabs = await chrome.tabs.query({ url: WindowUrl + "*" });
+
+            if (tabs.length > 0) {
+                // ---- CASO A: La pestaña ya existe ----
+                console.log('Pestaña de chat encontrada, reutilizándola.');
+                const targetTab = tabs[0];
+                chatTabId = targetTab.id;
+                
+                // Aunque ya exista, puede que aún no esté cargada. Esperamos a que lo esté.
+                await waitForTabLoad(chatTabId);
+                resolve(chatTabId);
+
+            } else {
+                // ---- CASO B: La pestaña no existe ----
+                console.log('Pestaña de chat no encontrada, creando una nueva en segundo plano.');
+                const newTab = await chrome.tabs.create({ url: WindowUrl, active: false });
+                chatTabId = newTab.id;
+
+                // La nueva pestaña necesita tiempo para cargar. Esperamos.
+                await waitForTabLoad(chatTabId);
+                resolve(chatTabId);
+            }
+        } catch (error) {
+            // ---- MANEJO DE ERRORES ----
+            console.error('Error durante la creación/búsqueda de la pestaña:', error);
+            // Si algo falla, es crucial limpiar el estado para permitir un nuevo intento.
+            chatTabId = null;
+            tabCreationPromise = null; // Liberamos el "bloqueo".
+            reject(error);
+        }
+    });
+
+    return tabCreationPromise;
+}
+
+/**
+ * Función de utilidad para esperar a que una pestaña termine de cargar.
+ * @param {number} tabId - El ID de la pestaña a observar.
+ * @returns {Promise<void>} Una promesa que se resuelve cuando la pestaña está en estado 'complete'.
+ */
+function waitForTabLoad(tabId) {
+    return new Promise(async (resolve) => {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.status === 'complete') {
+            resolve();
+            return;
+        }
+
+        const listener = (updatedTabId, changeInfo) => {
+            if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                chrome.tabs.onUpdated.removeListener(listener);
+                resolve();
+            }
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+    });
+}
+
+/**
+ * Listener para limpiar el estado si el usuario cierra la pestaña manualmente.
+ * Es una buena práctica para mantener el estado sincronizado.
+ */
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    if (tabId === chatTabId) {
+        console.log('El usuario ha cerrado la pestaña de chat. Reiniciando estado.');
+        // Reiniciamos AMBAS variables de estado.
+        chatTabId = null;
+        tabCreationPromise = null;
+    }
+});
 
 // Escuchar mensajes de content scripts y popup
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
@@ -150,38 +209,44 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       console.log('Enviando webhook...');
       const webhookResult = await sendWebhook(WebhookUrl, eventData.payload);
       
-      // Notificar resultado al popup si está abierto
-      try {
-        chrome.runtime.sendMessage({
-          type: 'WEBHOOK_RESULT',
-          payload: webhookResult
-        });
-      } catch (error) {
-        // El popup no está abierto, no hay problema
-      }
+      // Notificar resultado al popup si está abierto (CORRECCIÓN AQUÍ)
+/*       chrome.runtime.sendMessage({
+        type: 'WEBHOOK_RESULT',
+        success: webhookResult.success,
+        result: webhookResult.result || null,
+        error: webhookResult.error || null,
+        timestamp: now
+      }); */
     }
     
     // Manejar ventana nueva
-    await handleNewWindow(eventData);
+    await handleNewWindow(message);
     
-    // Reenviar a popup si está conectado
-    try {
-      chrome.runtime.sendMessage({
-        type: message.type,
-        payload: eventData.payload
-      });
-    } catch (error) {
-      // El popup no está abierto
-    }
-    
+    // Reenviar a popup si está conectado (CORRECCIÓN AQUÍ)
+    /* chrome.runtime.sendMessage(eventData); */
     // Responder al sender
-    sendResponse({ success: true, timestamp: now });
+    sendResponse({
+        type: 'success',
+        ...eventData
+      });
   }
   
   // Para mensajes síncronos
-  return true;
+  return {
+        type: 'success',
+        ...message
+  }; 
 });
-
+function sendMessageToTab(tabId, message) {
+  chrome.scripting.executeScript({
+    target: { tabId: tabId },
+    func: (msg) => {
+      // Este código se ejecuta DENTRO de la página de destino
+      window.postMessage(msg, window.location.origin);
+    },
+    args: [message] // Argumentos que se pasarán a la función
+  });
+}
 // Limpiar referencias de ventanas cerradas
 chrome.windows.onRemoved.addListener((windowId) => {
   if (newWindow && newWindow.id === windowId) {
@@ -189,33 +254,3 @@ chrome.windows.onRemoved.addListener((windowId) => {
     newWindow = null;
   }
 });
-
-// Conectar con popup
-const popupPorts = new Set();
-
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name === "popup") {
-    popupPorts.add(port);
-    
-    // Enviar configuración actual al popup
-    port.postMessage({
-      type: 'SETTINGS_UPDATE',
-      payload: { WebhookUrl, WebhookOption, WindowUrl, OpenWindow }
-    });
-    
-    port.onDisconnect.addListener(() => {
-      popupPorts.delete(port);
-    });
-  }
-});
-
-// Función para notificar a todos los popups conectados
-function notifyPopups(message) {
-  popupPorts.forEach(port => {
-    try {
-      port.postMessage(message);
-    } catch (error) {
-      popupPorts.delete(port);
-    }
-  });
-}
