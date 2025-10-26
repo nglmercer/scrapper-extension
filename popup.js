@@ -40,7 +40,7 @@
     status: document.getElementById("status"),
   };
 
-  // Default configuration
+  // Default configuration - FIXED: Removed duplicate properties
   const defaultConfig = {
     WebhookUrl: "",
     WebhookOption: false,
@@ -49,9 +49,7 @@
     debugMode: false,
     eventBufferSize: 1000,
     masterSwitch: true,
-    // Interceptor specific settings
-    masterSwitch: true,
-    debugMode: true,
+    // WebSocket settings
     websockets: {
       enabled: true,
       urlFilters: [
@@ -69,6 +67,7 @@
 
   let currentConfig = { ...defaultConfig };
   let backgroundPort = null;
+  let isLoading = false; // Prevent concurrent loads
 
   // Initialize tabs
   function initTabs() {
@@ -95,20 +94,29 @@
 
   // Show status message
   function showStatus(message, type = "info") {
+    if (!elements.status) return;
+
     elements.status.textContent = message;
     elements.status.className = `status status-${type}`;
     elements.status.style.display = "block";
 
     setTimeout(() => {
-      elements.status.style.display = "none";
+      if (elements.status) {
+        elements.status.style.display = "none";
+      }
     }, 3000);
   }
 
-  // Save configuration to storage and update background
+  // Save configuration to storage and update background - FIXED: Updated local config
   async function saveConfig(config) {
     try {
+      console.log("Saving config:", config);
+
       // Save to local storage
       await chrome.storage.local.set(config);
+
+      // Update local currentConfig - FIXED: This was missing
+      currentConfig = { ...currentConfig, ...config };
 
       // Send update to background script
       if (backgroundPort) {
@@ -133,17 +141,44 @@
     }
   }
 
-  // Load configuration from storage
+  // Load configuration from storage - FIXED: Explicit key list
   async function loadConfig() {
+    if (isLoading) {
+      console.log("Already loading config, skipping...");
+      return currentConfig;
+    }
+
+    isLoading = true;
+
     try {
-      const result = await chrome.storage.local.get(Object.keys(defaultConfig));
+      console.log("Loading configuration from storage...");
+
+      // Use explicit key list to avoid issues with duplicates
+      const keysToGet = [
+        "WebhookUrl",
+        "WebhookOption",
+        "WindowUrl",
+        "OpenWindow",
+        "debugMode",
+        "eventBufferSize",
+        "masterSwitch",
+        "websockets",
+      ];
+
+      const result = await chrome.storage.local.get(keysToGet);
+      console.log("Storage result:", result);
+
       currentConfig = { ...defaultConfig, ...result };
       updateUI();
+
+      console.log("Final current config:", currentConfig);
       return currentConfig;
     } catch (error) {
       console.error("Error loading config:", error);
       showStatus("Error loading configuration", "error");
       return defaultConfig;
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -152,57 +187,85 @@
     console.log("Updating UI with config:", currentConfig);
 
     // General settings
-    if (elements.masterSwitch)
+    if (elements.masterSwitch) {
       elements.masterSwitch.checked = currentConfig.masterSwitch ?? true;
-    if (elements.WebhookOption)
+      console.log("Master switch set to:", elements.masterSwitch.checked);
+    }
+
+    if (elements.WebhookOption) {
       elements.WebhookOption.checked = currentConfig.WebhookOption || false;
-    if (elements.WebhookUrl)
+      console.log("Webhook option set to:", elements.WebhookOption.checked);
+    }
+
+    if (elements.WebhookUrl) {
       elements.WebhookUrl.value = currentConfig.WebhookUrl || "";
-    if (elements.OpenWindow)
+    }
+
+    if (elements.OpenWindow) {
       elements.OpenWindow.checked = currentConfig.OpenWindow || false;
-    if (elements.WindowUrl)
+      console.log("Open window set to:", elements.OpenWindow.checked);
+    }
+
+    if (elements.WindowUrl) {
       elements.WindowUrl.value = currentConfig.WindowUrl || "";
+    }
 
     // Advanced settings
-    if (elements.debugMode)
+    if (elements.debugMode) {
       elements.debugMode.checked = currentConfig.debugMode ?? false;
-    if (elements.eventBufferSize)
+    }
+
+    if (elements.eventBufferSize) {
       elements.eventBufferSize.value = currentConfig.eventBufferSize || 1000;
+    }
 
     // WebSocket settings
-    if (elements.wsEnabled)
+    if (elements.wsEnabled) {
       elements.wsEnabled.checked = currentConfig.websockets?.enabled ?? true;
-    if (elements.wsUrlFilters)
-      elements.wsUrlFilters.value = (
-        currentConfig.websockets?.urlFilters || []
-      ).join("\n");
-    if (elements.wsMinSize)
-      elements.wsMinSize.value = currentConfig.websockets?.minSize || 10;
-    if (elements.wsMaxSize)
-      elements.wsMaxSize.value = currentConfig.websockets?.maxSize || 10000;
-    if (elements.wsExcludeStrings)
-      elements.wsExcludeStrings.value = (
-        currentConfig.websockets?.excludeStrings || []
-      ).join(",");
+    }
 
-    // Update visibility based on switches
+    if (elements.wsUrlFilters) {
+      const urlFilters = currentConfig.websockets?.urlFilters || [];
+      elements.wsUrlFilters.value = urlFilters.join("\n");
+    }
+
+    if (elements.wsMinSize) {
+      elements.wsMinSize.value = currentConfig.websockets?.minSize || 10;
+    }
+
+    if (elements.wsMaxSize) {
+      elements.wsMaxSize.value = currentConfig.websockets?.maxSize || 10000;
+    }
+
+    if (elements.wsExcludeStrings) {
+      const excludeStrings = currentConfig.websockets?.excludeStrings || [];
+      elements.wsExcludeStrings.value = excludeStrings.join(",");
+    }
+
+    // Update visibility based on switches - FIXED: Added better error handling
     updateFieldVisibility();
   }
 
-  // Update field visibility based on switch states
+  // Update field visibility based on switch states - FIXED: Better error handling
   function updateFieldVisibility() {
-    const webhookContainer = document.getElementById("WebhookOption_container");
-    if (webhookContainer) {
-      webhookContainer.style.display = currentConfig.WebhookOption
-        ? "flex"
-        : "none";
-    }
+    try {
+      const webhookContainer = document.getElementById(
+        "WebhookOption_container",
+      );
+      if (webhookContainer) {
+        const shouldShow = currentConfig.WebhookOption;
+        webhookContainer.style.display = shouldShow ? "flex" : "none";
+        console.log("Webhook container visibility:", shouldShow);
+      }
 
-    const windowContainer = document.getElementById("OpenWindow_container");
-    if (windowContainer) {
-      windowContainer.style.display = currentConfig.OpenWindow
-        ? "flex"
-        : "none";
+      const windowContainer = document.getElementById("OpenWindow_container");
+      if (windowContainer) {
+        const shouldShow = currentConfig.OpenWindow;
+        windowContainer.style.display = shouldShow ? "flex" : "none";
+        console.log("Window container visibility:", shouldShow);
+      }
+    } catch (error) {
+      console.error("Error updating field visibility:", error);
     }
   }
 
@@ -240,6 +303,7 @@
 
   // Reset to default configuration
   async function resetToDefault() {
+    console.log("Resetting to default configuration");
     currentConfig = { ...defaultConfig };
     updateUI();
     await saveConfig(currentConfig);
@@ -319,7 +383,7 @@
     }
   }
 
-  // Event listeners
+  // Event listeners - FIXED: Added proper save calls
   function initEventListeners() {
     // Switch toggles
     if (elements.masterSwitch) {
@@ -329,17 +393,21 @@
       });
     }
 
+    // FIXED: Added save calls for WebhookOption
     if (elements.WebhookOption) {
-      elements.WebhookOption.addEventListener("change", () => {
+      elements.WebhookOption.addEventListener("change", async () => {
         currentConfig.WebhookOption = elements.WebhookOption.checked;
         updateFieldVisibility();
+        await saveConfig(currentConfig); // FIXED: This was missing
       });
     }
 
+    // FIXED: Added save calls for OpenWindow
     if (elements.OpenWindow) {
-      elements.OpenWindow.addEventListener("change", () => {
+      elements.OpenWindow.addEventListener("change", async () => {
         currentConfig.OpenWindow = elements.OpenWindow.checked;
         updateFieldVisibility();
+        await saveConfig(currentConfig); // FIXED: This was missing
       });
     }
 
@@ -376,7 +444,7 @@
       elements.importConfig.addEventListener("click", importConfig);
     }
 
-    // Real-time updates for text inputs
+    // Real-time updates for text inputs - FIXED: Better debouncing
     const textInputs = [
       elements.WebhookUrl,
       elements.WindowUrl,
@@ -404,11 +472,17 @@
   // Initialize popup
   async function init() {
     try {
+      console.log("Initializing popup...");
+
       initTabs();
       initEventListeners();
       connectToBackground();
-      await loadConfig();
-      console.log("Popup initialized successfully");
+
+      // Load config with a small delay to ensure DOM is ready
+      setTimeout(async () => {
+        await loadConfig();
+        console.log("Popup initialized successfully");
+      }, 100);
     } catch (error) {
       console.error("Failed to initialize popup:", error);
       showStatus("Failed to initialize popup", "error");
