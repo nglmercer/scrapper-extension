@@ -1,4 +1,4 @@
-// content.js - Enhanced content script with bidirectional communication
+// content.js - FIXED: Sin duplicaciones
 console.log("RAW Interceptor: Enhanced content script started");
 
 let messageCount = 0;
@@ -8,9 +8,8 @@ let config = {
   WebhookOption: false,
   WindowUrl: "",
   OpenWindow: false,
-  // Interceptor specific config
   masterSwitch: true,
-  debugMode: true,
+  debugMode: false,
 };
 
 // Detect current platform
@@ -35,10 +34,82 @@ function injectScript() {
   (document.head || document.documentElement).appendChild(script);
 }
 
+// FIXED: Un solo handler para TODOS los mensajes
+function handleAllMessages(event) {
+  // Ignorar mensajes que no son del interceptor
+  if (!event.data?.type) return;
+
+  // CASO 1: Mensajes de control desde injected.js
+  if (event.data.type === "RAW_INTERCEPTOR_MESSAGE") {
+    handleInjectedScriptMessage(event);
+    return;
+  }
+
+  // CASO 2: Datos de WebSocket desde injected.js
+  if (event.data.type === "RAW_DATA_EVENT") {
+    forwardWebSocketData(event);
+    return;
+  }
+}
+
+// Handle messages from injected script
+function handleInjectedScriptMessage(event) {
+  const { type, data } = event.data.payload;
+
+  switch (type) {
+    case "REQUEST_CONFIG":
+      window.postMessage(
+        {
+          type: "RAW_INTERCEPTOR_RESPONSE",
+          payload: {
+            type: "CONFIG_RESPONSE",
+            data: {
+              masterSwitch: config.masterSwitch,
+              debugMode: config.debugMode,
+            },
+          },
+        },
+        "*",
+      );
+      break;
+
+    case "TOGGLE_DEBUG":
+      const newDebugMode = !data.currentMode;
+      config.debugMode = newDebugMode;
+      chrome.storage.local.set({ debugMode: newDebugMode });
+      window.postMessage(
+        {
+          type: "RAW_INTERCEPTOR_RESPONSE",
+          payload: {
+            type: "TOGGLE_DEBUG",
+            data: { debugMode: newDebugMode },
+          },
+        },
+        "*",
+      );
+      break;
+
+    case "TOGGLE_MASTER":
+      const newMasterSwitch = !data.currentSwitch;
+      config.masterSwitch = newMasterSwitch;
+      chrome.storage.local.set({ masterSwitch: newMasterSwitch });
+      window.postMessage(
+        {
+          type: "RAW_INTERCEPTOR_RESPONSE",
+          payload: {
+            type: "TOGGLE_MASTER",
+            data: { masterSwitch: newMasterSwitch },
+          },
+        },
+        "*",
+      );
+      break;
+  }
+}
+
 // Forward WebSocket data to background with throttling
 function forwardWebSocketData(event) {
-  // Only handle WebSocket events
-  if (!event.data?.type || event.data.type !== "RAW_DATA_EVENT") return;
+  // Validación adicional
   if (event.data.payload?.source !== "websockets") return;
 
   messageCount++;
@@ -58,6 +129,7 @@ function forwardWebSocketData(event) {
       lastLogTime = now;
     }
 
+    // IMPORTANTE: Solo enviamos UNA VEZ a background
     chrome.runtime
       .sendMessage({
         type: "RAW_DATA_EVENT",
@@ -74,71 +146,6 @@ function forwardWebSocketData(event) {
     if (messageCount % 50 === 0) {
       console.error("Error forwarding WebSocket data:", error);
     }
-  }
-}
-
-// Handle messages from injected script
-function handleInjectedScriptMessage(event) {
-  if (!event.data?.type || event.data.type !== "RAW_INTERCEPTOR_MESSAGE")
-    return;
-
-  const { type, data } = event.data.payload;
-
-  switch (type) {
-    case "REQUEST_CONFIG":
-      // Send current config to injected script
-      window.postMessage(
-        {
-          type: "RAW_INTERCEPTOR_RESPONSE",
-          payload: {
-            type: "CONFIG_RESPONSE",
-            data: {
-              masterSwitch: config.masterSwitch,
-              debugMode: config.debugMode,
-            },
-          },
-        },
-        "*",
-      );
-      break;
-
-    case "TOGGLE_DEBUG":
-      const newDebugMode = !data.currentMode;
-      config.debugMode = newDebugMode;
-      chrome.storage.local.set({ debugMode: newDebugMode }, () => {
-        console.log("Debug mode toggled:", newDebugMode);
-      });
-      // Send response back to injected script
-      window.postMessage(
-        {
-          type: "RAW_INTERCEPTOR_RESPONSE",
-          payload: {
-            type: "TOGGLE_DEBUG",
-            data: { debugMode: newDebugMode },
-          },
-        },
-        "*",
-      );
-      break;
-
-    case "TOGGLE_MASTER":
-      const newMasterSwitch = !data.currentSwitch;
-      config.masterSwitch = newMasterSwitch;
-      chrome.storage.local.set({ masterSwitch: newMasterSwitch }, () => {
-        console.log("Master switch toggled:", newMasterSwitch);
-      });
-      // Send response back to injected script
-      window.postMessage(
-        {
-          type: "RAW_INTERCEPTOR_RESPONSE",
-          payload: {
-            type: "TOGGLE_MASTER",
-            data: { masterSwitch: newMasterSwitch },
-          },
-        },
-        "*",
-      );
-      break;
   }
 }
 
@@ -211,42 +218,16 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Handle chat window messages if enabled
-  if (
-    message.type === "RAW_DATA_EVENT" &&
-    config.OpenWindow &&
-    config.WindowUrl
-  ) {
-    chrome.tabs.query({ url: config.WindowUrl + "*" }, (tabs) => {
-      if (tabs[0]) {
-        chrome.scripting
-          .executeScript({
-            target: { tabId: tabs[0].id },
-            func: (msg) => window.postMessage(msg, "*"),
-            args: [message],
-          })
-          .catch(() => {
-            // Silently handle execution errors
-          });
-      }
-    });
-  }
-  sendResponse({ received: true });
-  return true;
-});
+// ELIMINADO: Ya no reenviamos mensajes desde aquí
+// El background.js se encarga de enviar a la ventana de chat
 
 // Initialize the content script
 function initialize() {
   injectScript();
   loadConfig();
 
-  // Listen for messages from injected script
-  window.addEventListener("message", handleInjectedScriptMessage);
-
-  // Listen for WebSocket data from injected script
-  window.addEventListener("message", forwardWebSocketData, { passive: true });
+  // FIXED: Un solo listener para TODO
+  window.addEventListener("message", handleAllMessages, { passive: true });
 
   // Retry injection if WebSocket interceptor is not available
   setTimeout(() => {

@@ -1,4 +1,4 @@
-// popup.js - Enhanced popup script with proper background communication
+// popup.js - FIXED: Sin duplicaciones
 (() => {
   "use strict";
 
@@ -6,41 +6,30 @@
 
   // DOM elements cache
   const elements = {
-    // Tab buttons
     tabButtons: document.querySelectorAll(".tablink"),
     tabContents: document.querySelectorAll(".tabcontent"),
-
-    // General settings
     masterSwitch: document.getElementById("masterSwitch"),
     WebhookOption: document.getElementById("WebhookOption"),
     WebhookUrl: document.getElementById("WebhookUrl"),
     OpenWindow: document.getElementById("OpenWindow"),
     WindowUrl: document.getElementById("WindowUrl"),
-
-    // Advanced settings
+    keepAliveOnTabClose: document.getElementById("keepAliveOnTabClose"),
     debugMode: document.getElementById("debugMode"),
     eventBufferSize: document.getElementById("eventBufferSize"),
-
-    // WebSocket filter settings
     wsEnabled: document.getElementById("wsEnabled"),
     wsUrlFilters: document.getElementById("wsUrlFilters"),
     wsMinSize: document.getElementById("wsMinSize"),
     wsMaxSize: document.getElementById("wsMaxSize"),
     wsExcludeStrings: document.getElementById("wsExcludeStrings"),
-
-    // Buttons
     saveAdvanced: document.getElementById("saveAdvanced"),
     resetAdvanced: document.getElementById("resetAdvanced"),
     saveFilters: document.getElementById("saveFilters"),
     resetFilters: document.getElementById("resetFilters"),
     exportConfig: document.getElementById("exportConfig"),
     importConfig: document.getElementById("importConfig"),
-
-    // Status
     status: document.getElementById("status"),
   };
 
-  // Default configuration - FIXED: Removed duplicate properties
   const defaultConfig = {
     WebhookUrl: "",
     WebhookOption: false,
@@ -49,16 +38,9 @@
     debugMode: false,
     eventBufferSize: 1000,
     masterSwitch: true,
-    // WebSocket settings
     websockets: {
       enabled: true,
-      urlFilters: [
-        "webcast",
-        "tiktok.com",
-        "im-ws",
-        "pusher",
-        "irc-ws.chat.twitch.tv",
-      ],
+      urlFilters: ["webcast", "tikfinity.zerody.one", "irc-ws.chat.twitch.tv"],
       minSize: 10,
       maxSize: 10000,
       excludeStrings: ["hi", "pong", "ping"],
@@ -67,26 +49,26 @@
 
   let currentConfig = { ...defaultConfig };
   let backgroundPort = null;
-  let isLoading = false; // Prevent concurrent loads
+  let isLoading = false;
+
+  // FIXED: Flags para evitar inicialización múltiple
+  let isInitialized = false;
+  let saveTimeouts = new Map(); // Para debouncing individual por campo
 
   // Initialize tabs
   function initTabs() {
     elements.tabButtons.forEach((button) => {
       button.addEventListener("click", () => {
         const tabName = button.dataset.tab;
-
-        // Update active states
         elements.tabButtons.forEach((btn) => btn.classList.remove("active"));
         elements.tabContents.forEach(
           (content) => (content.style.display = "none"),
         );
-
         button.classList.add("active");
         document.getElementById(tabName).style.display = "block";
       });
     });
 
-    // Set first tab as active by default
     if (elements.tabButtons[0]) {
       elements.tabButtons[0].click();
     }
@@ -107,25 +89,19 @@
     }, 3000);
   }
 
-  // Save configuration to storage and update background - FIXED: Updated local config
+  // Save configuration to storage and update background
   async function saveConfig(config) {
     try {
       console.log("Saving config:", config);
-
-      // Save to local storage
       await chrome.storage.local.set(config);
-
-      // Update local currentConfig - FIXED: This was missing
       currentConfig = { ...currentConfig, ...config };
 
-      // Send update to background script
       if (backgroundPort) {
         backgroundPort.postMessage({
           type: "UPDATE_CONFIG",
           config: config,
         });
       } else {
-        // Fallback to direct message
         chrome.runtime.sendMessage({
           type: "UPDATE_CONFIG",
           config: config,
@@ -141,7 +117,7 @@
     }
   }
 
-  // Load configuration from storage - FIXED: Explicit key list
+  // Load configuration from storage
   async function loadConfig() {
     if (isLoading) {
       console.log("Already loading config, skipping...");
@@ -153,7 +129,6 @@
     try {
       console.log("Loading configuration from storage...");
 
-      // Use explicit key list to avoid issues with duplicates
       const keysToGet = [
         "WebhookUrl",
         "WebhookOption",
@@ -186,15 +161,12 @@
   function updateUI() {
     console.log("Updating UI with config:", currentConfig);
 
-    // General settings
     if (elements.masterSwitch) {
       elements.masterSwitch.checked = currentConfig.masterSwitch ?? true;
-      console.log("Master switch set to:", elements.masterSwitch.checked);
     }
 
     if (elements.WebhookOption) {
       elements.WebhookOption.checked = currentConfig.WebhookOption || false;
-      console.log("Webhook option set to:", elements.WebhookOption.checked);
     }
 
     if (elements.WebhookUrl) {
@@ -203,14 +175,17 @@
 
     if (elements.OpenWindow) {
       elements.OpenWindow.checked = currentConfig.OpenWindow || false;
-      console.log("Open window set to:", elements.OpenWindow.checked);
     }
 
     if (elements.WindowUrl) {
       elements.WindowUrl.value = currentConfig.WindowUrl || "";
     }
 
-    // Advanced settings
+    if (elements.keepAliveOnTabClose) {
+      elements.keepAliveOnTabClose.checked =
+        currentConfig.keepAliveOnTabClose || false;
+    }
+
     if (elements.debugMode) {
       elements.debugMode.checked = currentConfig.debugMode ?? false;
     }
@@ -219,7 +194,6 @@
       elements.eventBufferSize.value = currentConfig.eventBufferSize || 1000;
     }
 
-    // WebSocket settings
     if (elements.wsEnabled) {
       elements.wsEnabled.checked = currentConfig.websockets?.enabled ?? true;
     }
@@ -242,11 +216,10 @@
       elements.wsExcludeStrings.value = excludeStrings.join(",");
     }
 
-    // Update visibility based on switches - FIXED: Added better error handling
     updateFieldVisibility();
   }
 
-  // Update field visibility based on switch states - FIXED: Better error handling
+  // Update field visibility based on switch states
   function updateFieldVisibility() {
     try {
       const webhookContainer = document.getElementById(
@@ -255,14 +228,12 @@
       if (webhookContainer) {
         const shouldShow = currentConfig.WebhookOption;
         webhookContainer.style.display = shouldShow ? "flex" : "none";
-        console.log("Webhook container visibility:", shouldShow);
       }
 
       const windowContainer = document.getElementById("OpenWindow_container");
       if (windowContainer) {
         const shouldShow = currentConfig.OpenWindow;
         windowContainer.style.display = shouldShow ? "flex" : "none";
-        console.log("Window container visibility:", shouldShow);
       }
     } catch (error) {
       console.error("Error updating field visibility:", error);
@@ -297,7 +268,6 @@
       },
     };
 
-    console.log("Config from UI:", config);
     return config;
   }
 
@@ -361,9 +331,6 @@
           currentConfig = { ...currentConfig, ...message.config };
           updateUI();
           showStatus("Configuration updated", "info");
-        } else if (message.type === "RAW_DATA_EVENT") {
-          // Update real-time stats if needed
-          console.log("Received WebSocket data:", message.payload);
         }
       });
 
@@ -372,7 +339,6 @@
         backgroundPort = null;
       });
 
-      // Request current config when connecting
       setTimeout(() => {
         if (backgroundPort) {
           backgroundPort.postMessage({ type: "GET_CONFIG" });
@@ -383,8 +349,25 @@
     }
   }
 
-  // Event listeners - FIXED: Added proper save calls
+  // FIXED: Debounce mejorado por campo
+  function debouncedSave(fieldName, callback, delay = 1000) {
+    // Cancelar timeout anterior para este campo específico
+    if (saveTimeouts.has(fieldName)) {
+      clearTimeout(saveTimeouts.get(fieldName));
+    }
+
+    const timeout = setTimeout(callback, delay);
+    saveTimeouts.set(fieldName, timeout);
+  }
+
+  // Event listeners - FIXED: Sin duplicaciones
   function initEventListeners() {
+    // IMPORTANTE: Solo inicializar UNA VEZ
+    if (isInitialized) {
+      console.log("Event listeners already initialized, skipping...");
+      return;
+    }
+
     // Switch toggles
     if (elements.masterSwitch) {
       elements.masterSwitch.addEventListener("change", async () => {
@@ -393,21 +376,36 @@
       });
     }
 
-    // FIXED: Added save calls for WebhookOption
     if (elements.WebhookOption) {
       elements.WebhookOption.addEventListener("change", async () => {
         currentConfig.WebhookOption = elements.WebhookOption.checked;
         updateFieldVisibility();
-        await saveConfig(currentConfig); // FIXED: This was missing
+        await saveConfig(currentConfig);
       });
     }
 
-    // FIXED: Added save calls for OpenWindow
     if (elements.OpenWindow) {
       elements.OpenWindow.addEventListener("change", async () => {
         currentConfig.OpenWindow = elements.OpenWindow.checked;
         updateFieldVisibility();
-        await saveConfig(currentConfig); // FIXED: This was missing
+        await saveConfig(currentConfig);
+      });
+    }
+
+    // Keep Alive toggle - NOTA: Esta funcionalidad NO es posible
+    if (elements.keepAliveOnTabClose) {
+      elements.keepAliveOnTabClose.addEventListener("change", async () => {
+        currentConfig.keepAliveOnTabClose =
+          elements.keepAliveOnTabClose.checked;
+        await saveConfig(currentConfig);
+
+        // ADVERTENCIA: Esto NO mantendrá la conexión WebSocket viva
+        // cuando cierres la pestaña. Las conexiones WebSocket están
+        // vinculadas al contexto de la página y se cierran automáticamente.
+        showStatus(
+          `Keep alive ${currentConfig.keepAliveOnTabClose ? "enabled" : "disabled"} (experimental)`,
+          "info",
+        );
       });
     }
 
@@ -444,29 +442,34 @@
       elements.importConfig.addEventListener("click", importConfig);
     }
 
-    // Real-time updates for text inputs - FIXED: Better debouncing
+    // Real-time updates for text inputs - FIXED: Mejor debouncing
     const textInputs = [
-      elements.WebhookUrl,
-      elements.WindowUrl,
-      elements.eventBufferSize,
-      elements.wsUrlFilters,
-      elements.wsMinSize,
-      elements.wsMaxSize,
-      elements.wsExcludeStrings,
+      { element: elements.WebhookUrl, name: "WebhookUrl" },
+      { element: elements.WindowUrl, name: "WindowUrl" },
+      { element: elements.eventBufferSize, name: "eventBufferSize" },
+      { element: elements.wsUrlFilters, name: "wsUrlFilters" },
+      { element: elements.wsMinSize, name: "wsMinSize" },
+      { element: elements.wsMaxSize, name: "wsMaxSize" },
+      { element: elements.wsExcludeStrings, name: "wsExcludeStrings" },
     ];
 
-    textInputs.forEach((input) => {
-      if (input) {
-        let timeout;
-        input.addEventListener("input", async () => {
-          clearTimeout(timeout);
-          timeout = setTimeout(async () => {
-            const config = getConfigFromUI();
-            await saveConfig(config);
-          }, 1000); // Debounce save after 1 second
+    textInputs.forEach(({ element, name }) => {
+      if (element) {
+        element.addEventListener("input", () => {
+          debouncedSave(
+            name,
+            async () => {
+              const config = getConfigFromUI();
+              await saveConfig(config);
+            },
+            1500,
+          ); // 1.5 segundos de debounce
         });
       }
     });
+
+    isInitialized = true;
+    console.log("Event listeners initialized successfully");
   }
 
   // Initialize popup

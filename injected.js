@@ -31,7 +31,10 @@
     if (hostname.includes("kick.com")) return "kick";
     if (hostname.includes("twitch.tv")) return "twitch";
     if (hostname.includes("youtube.com")) return "youtube";
-    return "unknown";
+    const regexHostname = /^([^.]+)\./;
+    return regexHostname.test(hostname)
+      ? regexHostname.exec(hostname)[1]
+      : hostname.split(".")[0];
   }
 
   // Send message to content script
