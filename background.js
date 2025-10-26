@@ -1,256 +1,294 @@
-// background.js (Service Worker para Manifest V3)
+// background.js - Enhanced service worker with interceptor configuration management
+let config = {
+  WebhookUrl: "",
+  WebhookOption: false,
+  WindowUrl: "https://nglmercer.github.io/multistreamASTRO/chat",
+  OpenWindow: false,
+  // Interceptor specific config
+  masterSwitch: true,
+  debugMode: true,
+};
 
-let WebhookUrl = '';
-let WebhookOption = false;
-let WindowUrl = '';
-let OpenWindow = false;
-let newWindow = null;
+let chatTabId = null;
+let tabCreationPromise = null;
+const popupPorts = new Set();
 
-// Cargar configuración al inicializar
-chrome.runtime.onStartup.addListener(loadSettings);
-chrome.runtime.onInstalled.addListener(loadSettings);
-
+// Load configuration from storage
 async function loadSettings() {
   try {
     const result = await chrome.storage.local.get([
-      'WebhookUrl', 
-      'WebhookOption', 
-      'WindowUrl', 
-      'OpenWindow'
+      "WebhookUrl",
+      "WebhookOption",
+      "WindowUrl",
+      "OpenWindow",
+      "masterSwitch",
+      "debugMode",
     ]);
-    
-    WebhookUrl = result.WebhookUrl || '';
-    WebhookOption = result.WebhookOption || false;
-    WindowUrl = result.WindowUrl || 'https://nglmercer.github.io/multistreamASTRO/chat';
-    OpenWindow = result.OpenWindow || false;
-    
-    console.log('Configuración cargada:', { WebhookUrl, WebhookOption, WindowUrl, OpenWindow });
+
+    config.WebhookUrl = result.WebhookUrl || "";
+    config.WebhookOption = result.WebhookOption || false;
+    config.WindowUrl = result.WindowUrl || config.WindowUrl;
+    config.OpenWindow = result.OpenWindow || false;
+    config.masterSwitch =
+      result.masterSwitch !== undefined ? result.masterSwitch : true;
+    config.debugMode = result.debugMode !== undefined ? result.debugMode : true;
+
+    console.log("Background configuration loaded:", config);
   } catch (error) {
-    console.error('Error cargando configuración:', error);
+    console.error("Error loading settings:", error);
   }
 }
 
-// Escuchar cambios en la configuración
-chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'local') {
-    if (changes.WebhookUrl) WebhookUrl = changes.WebhookUrl.newValue || '';
-    if (changes.WebhookOption) WebhookOption = changes.WebhookOption.newValue || false;
-    if (changes.WindowUrl) WindowUrl = changes.WindowUrl.newValue || '';
-    if (changes.OpenWindow) OpenWindow = changes.OpenWindow.newValue || false;
-    
-    console.log('Configuración actualizada:', { WebhookUrl, WebhookOption, WindowUrl, OpenWindow });
+// Initialize on startup and install
+chrome.runtime.onStartup.addListener(loadSettings);
+chrome.runtime.onInstalled.addListener(async () => {
+  await loadSettings();
+
+  // Initialize default values for interceptor config if not set
+  const existing = await chrome.storage.local.get([
+    "masterSwitch",
+    "debugMode",
+  ]);
+  if (existing.masterSwitch === undefined) {
+    await chrome.storage.local.set({ masterSwitch: true });
+  }
+  if (existing.debugMode === undefined) {
+    await chrome.storage.local.set({ debugMode: true });
   }
 });
 
-// Función para enviar webhook
+// Listen for configuration changes
+chrome.storage.onChanged.addListener((changes) => {
+  for (const [key, { newValue }] of Object.entries(changes)) {
+    if (config.hasOwnProperty(key)) {
+      config[key] = newValue;
+      console.log(`Configuration updated: ${key} = ${newValue}`);
+    }
+  }
+});
+
+// Send WebSocket data to webhook
 async function sendWebhook(url, data) {
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const result = await response.json().catch(() => response.text());
-    console.log('Webhook enviado exitosamente:', result);
-    return { success: true, result };
-    
+    return { success: true };
   } catch (error) {
-    console.error('Error enviando webhook:', error);
     return { success: false, error: error.message };
   }
 }
 
-let chatTabId = null;
-let tabCreationPromise = null; // ¡Esta es la clave! Nuestra promesa "bloqueadora".
+// Handle chat window for WebSocket data
+async function handleChatWindow(websocketData) {
+  if (!config.OpenWindow || !config.WindowUrl) return;
 
-/**
- * Función principal que se dispara con cada evento.
- * Su única responsabilidad es orquestar la obtención de la pestaña y el envío del mensaje.
- * @param {object} eventData - Los datos a enviar a la pestaña.
- */
-async function handleNewWindow(eventData) {
-    if (!OpenWindow || !WindowUrl) {
-        console.log('Opción de ventana/pestaña nueva deshabilitada.');
-        return;
-    }
-
-    try {
-        console.log('Evento recibido. Obteniendo o creando la pestaña de chat...');
-        // Esta función es ahora la responsable de manejar la lógica de creación/reutilización.
-        // Todas las llamadas concurrentes a handleNewWindow esperarán aquí a la misma promesa.
-        const tabId = await getOrCreateChatTab();
-        
-        console.log(`Pestaña lista con ID: ${tabId}. Enviando mensaje.`);
-        sendMessageToTab(tabId, eventData);
-
-    } catch (error) {
-        console.error('Error final en el flujo de manejo de la pestaña:', error);
-        // El reseteo del estado se maneja dentro de getOrCreateChatTab,
-        // por lo que aquí solo informamos del error.
-    }
+  try {
+    const tabId = await getOrCreateChatTab();
+    chrome.scripting
+      .executeScript({
+        target: { tabId },
+        func: (msg) => window.postMessage(msg, "*"),
+        args: [websocketData],
+      })
+      .catch(() => {});
+  } catch (error) {
+    chatTabId = null;
+    tabCreationPromise = null;
+  }
 }
 
-/**
- * Obtiene el ID de una pestaña de chat existente o crea una nueva.
- * Es "idempotente" y a prueba de condiciones de carrera.
- * @returns {Promise<number>} Una promesa que se resuelve con el ID de la pestaña.
- */
+// Get or create chat tab
 function getOrCreateChatTab() {
-    // ---- PASO 1: Bloqueo ----
-    // Si ya hay una operación de creación en curso, no hacemos nada nuevo.
-    // Simplemente devolvemos la promesa existente para que la nueva llamada espere.
-    if (tabCreationPromise) {
-        console.log('Una operación de creación de pestaña ya está en curso. Esperando su resultado...');
-        return tabCreationPromise;
-    }
+  if (tabCreationPromise) return tabCreationPromise;
 
-    // ---- PASO 2: Iniciar Operación ----
-    // Si no hay ninguna operación en curso, creamos una nueva promesa y la guardamos.
-    // Esto "bloquea" instantáneamente a cualquier otra llamada que llegue después de esta línea.
-    tabCreationPromise = new Promise(async (resolve, reject) => {
-        try {
-            const tabs = await chrome.tabs.query({ url: WindowUrl + "*" });
+  tabCreationPromise = new Promise(async (resolve, reject) => {
+    try {
+      const tabs = await chrome.tabs.query({ url: config.WindowUrl + "*" });
 
-            if (tabs.length > 0) {
-                // ---- CASO A: La pestaña ya existe ----
-                console.log('Pestaña de chat encontrada, reutilizándola.');
-                const targetTab = tabs[0];
-                chatTabId = targetTab.id;
-                
-                // Aunque ya exista, puede que aún no esté cargada. Esperamos a que lo esté.
-                await waitForTabLoad(chatTabId);
-                resolve(chatTabId);
-
-            } else {
-                // ---- CASO B: La pestaña no existe ----
-                console.log('Pestaña de chat no encontrada, creando una nueva en segundo plano.');
-                const newTab = await chrome.tabs.create({ url: WindowUrl, active: false });
-                chatTabId = newTab.id;
-
-                // La nueva pestaña necesita tiempo para cargar. Esperamos.
-                await waitForTabLoad(chatTabId);
-                resolve(chatTabId);
-            }
-        } catch (error) {
-            // ---- MANEJO DE ERRORES ----
-            console.error('Error durante la creación/búsqueda de la pestaña:', error);
-            // Si algo falla, es crucial limpiar el estado para permitir un nuevo intento.
-            chatTabId = null;
-            tabCreationPromise = null; // Liberamos el "bloqueo".
-            reject(error);
+      if (tabs.length > 0) {
+        chatTabId = tabs[0].id;
+        if (tabs[0].status === "complete") {
+          resolve(chatTabId);
+        } else {
+          await waitForTabLoad(chatTabId);
+          resolve(chatTabId);
         }
-    });
+      } else {
+        const newTab = await chrome.tabs.create({
+          url: config.WindowUrl,
+          active: false,
+        });
+        chatTabId = newTab.id;
+        await waitForTabLoad(chatTabId);
+        resolve(chatTabId);
+      }
+    } catch (error) {
+      chatTabId = null;
+      tabCreationPromise = null;
+      reject(error);
+    }
+  });
 
-    return tabCreationPromise;
+  return tabCreationPromise;
 }
 
-/**
- * Función de utilidad para esperar a que una pestaña termine de cargar.
- * @param {number} tabId - El ID de la pestaña a observar.
- * @returns {Promise<void>} Una promesa que se resuelve cuando la pestaña está en estado 'complete'.
- */
+// Wait for tab to fully load
 function waitForTabLoad(tabId) {
-    return new Promise(async (resolve) => {
+  return new Promise((resolve) => {
+    const checkTab = async () => {
+      try {
         const tab = await chrome.tabs.get(tabId);
-        if (tab.status === 'complete') {
-            resolve();
-            return;
+        if (tab.status === "complete") {
+          resolve();
+        } else {
+          setTimeout(checkTab, 100);
         }
-
-        const listener = (updatedTabId, changeInfo) => {
-            if (updatedTabId === tabId && changeInfo.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(listener);
-                resolve();
-            }
-        };
-        chrome.tabs.onUpdated.addListener(listener);
-    });
-}
-
-/**
- * Listener para limpiar el estado si el usuario cierra la pestaña manualmente.
- * Es una buena práctica para mantener el estado sincronizado.
- */
-chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-    if (tabId === chatTabId) {
-        console.log('El usuario ha cerrado la pestaña de chat. Reiniciando estado.');
-        // Reiniciamos AMBAS variables de estado.
-        chatTabId = null;
-        tabCreationPromise = null;
-    }
-});
-
-// Escuchar mensajes de content scripts y popup
-chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-  console.log('Mensaje recibido en background:', message);
-  
-  if (message.type === 'TIKTOK_LIVE_EVENT' || 
-      message.type === 'KICK_LIVE_EVENT' || 
-      message.type === 'TWITCH_LIVE_EVENT') {
-    
-    const now = Date.now();
-    const eventData = {
-      type: message.type,
-      payload: {
-        ...message.payload,
-        timestamp: now
+      } catch (error) {
+        resolve();
       }
     };
-    
-    // Enviar webhook si está habilitado
-    if (WebhookOption && WebhookUrl) {
-      console.log('Enviando webhook...');
-      const webhookResult = await sendWebhook(WebhookUrl, eventData.payload);
-      
-      // Notificar resultado al popup si está abierto (CORRECCIÓN AQUÍ)
-/*       chrome.runtime.sendMessage({
-        type: 'WEBHOOK_RESULT',
-        success: webhookResult.success,
-        result: webhookResult.result || null,
-        error: webhookResult.error || null,
-        timestamp: now
-      }); */
-    }
-    
-    // Manejar ventana nueva
-    await handleNewWindow(message);
-    
-    // Reenviar a popup si está conectado (CORRECCIÓN AQUÍ)
-    /* chrome.runtime.sendMessage(eventData); */
-    // Responder al sender
-    sendResponse({
-        type: 'success',
-        ...eventData
-      });
-  }
-  
-  // Para mensajes síncronos
-  return {
-        type: 'success',
-        ...message
-  }; 
-});
-function sendMessageToTab(tabId, message) {
-  chrome.scripting.executeScript({
-    target: { tabId: tabId },
-    func: (msg) => {
-      // Este código se ejecuta DENTRO de la página de destino
-      window.postMessage(msg, window.location.origin);
-    },
-    args: [message] // Argumentos que se pasarán a la función
+    checkTab();
   });
 }
-// Limpiar referencias de ventanas cerradas
-chrome.windows.onRemoved.addListener((windowId) => {
-  if (newWindow && newWindow.id === windowId) {
-    console.log('Ventana cerrada, limpiando referencia');
-    newWindow = null;
+
+// Handle tab removal
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === chatTabId) {
+    chatTabId = null;
+    tabCreationPromise = null;
+  }
+});
+
+// Handle port connections from popup
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "popup") {
+    popupPorts.add(port);
+
+    // Send current config when popup connects
+    port.postMessage({
+      type: "CONFIG_UPDATE",
+      config: config,
+    });
+
+    port.onDisconnect.addListener(() => popupPorts.delete(port));
+  }
+});
+
+// Broadcast configuration changes to all content scripts
+async function broadcastConfigChange(changes) {
+  try {
+    const tabs = await chrome.tabs.query({});
+
+    for (const tab of tabs) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          type: "CONFIG_BROADCAST",
+          changes: changes,
+        });
+      } catch (error) {
+        // Ignore tabs that don't have content scripts
+      }
+    }
+  } catch (error) {
+    console.error("Failed to broadcast config changes:", error);
+  }
+}
+
+// Main message handler for WebSocket data
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Process WebSocket messages
+  if (
+    message.type === "RAW_DATA_EVENT" &&
+    message.payload?.source === "websockets"
+  ) {
+    // Check master switch before processing
+    if (!config.masterSwitch) {
+      sendResponse({
+        type: "WEBSOCKET_DATA_BLOCKED",
+        reason: "Master switch disabled",
+      });
+      return true;
+    }
+
+    if (config.debugMode) {
+      console.log("Processing WebSocket data:", {
+        platform: message.payload.metadata?.platform,
+        type: message.payload.type,
+        size: message.payload.raw?.length || 0,
+      });
+    }
+
+    // Send webhook if enabled
+    if (config.WebhookOption && config.WebhookUrl) {
+      sendWebhook(config.WebhookUrl, message.payload);
+    }
+
+    // Handle chat window if enabled
+    if (config.OpenWindow) {
+      handleChatWindow(message);
+    }
+
+    // Forward to popup ports
+    popupPorts.forEach((port) => {
+      try {
+        port.postMessage(message);
+      } catch (error) {
+        popupPorts.delete(port);
+      }
+    });
+
+    sendResponse({ type: "WEBSOCKET_DATA_PROCESSED" });
+    return true;
+  }
+
+  // Handle configuration updates from popup
+  if (message.type === "UPDATE_CONFIG") {
+    const updates = message.config;
+
+    // Save to storage
+    chrome.storage.local.set(updates, () => {
+      console.log("Configuration updated:", updates);
+    });
+
+    // Broadcast changes to all content scripts
+    broadcastConfigChange(updates);
+
+    // Forward to other popup ports
+    popupPorts.forEach((port) => {
+      if (port !== sender) {
+        try {
+          port.postMessage({
+            type: "CONFIG_UPDATE",
+            config: { ...config, ...updates },
+          });
+        } catch (error) {
+          popupPorts.delete(port);
+        }
+      }
+    });
+
+    sendResponse({ success: true });
+    return true;
+  }
+
+  // Handle config requests
+  if (message.type === "GET_CONFIG") {
+    sendResponse({ config: config });
+    return true;
+  }
+
+  sendResponse({ received: true });
+  return true;
+});
+
+// Handle installation/updates
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    console.log("RAW Interceptor extension installed");
+  } else if (details.reason === "update") {
+    console.log("RAW Interceptor extension updated");
   }
 });

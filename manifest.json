@@ -1,64 +1,38 @@
 {
   "manifest_version": 3,
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "nglmercer@gmail.com"
-    }
-  },
-  "name": "MultiStream Live Interceptor",
-  "version": "2.0.1",
-  "description": "Intercepta y decodifica mensajes de TikTok Live",
-  "permissions": [
-    "activeTab",
-    "storage",
-    "scripting",
-    "tabs"
-  ],
-  "host_permissions": [
-    "https://www.tiktok.com/*",
-    "https://kick.com/*",
-    "https://www.twitch.tv/*",
-    "https://dashboard.kick.com/*",
-    "https://livecenter.tiktok.com/*",
-    "https://*/*",
-    "http://*/*"
-  ],
+  "name": "RAW Data Interceptor",
+  "version": "3.1.0",
+  "description": "Optimized RAW data interceptor for web platforms",
+  "permissions": ["activeTab", "storage", "scripting", "tabs", "webNavigation"],
+  "host_permissions": ["https://*/*", "http://*/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
       "16": "./icons/icon-16.png",
       "32": "./icons/icon-32.png",
       "48": "./icons/icon-48.png",
-      "128": "./icons/icon-128.png",
-      "256": "./icons/icon-256.png"
+      "128": "./icons/icon-128.png"
     }
   },
   "background": {
     "service_worker": "background.js",
     "scripts": ["background.js"]
   },
-  "content_scripts": [{
-    "matches": [
-      "https://www.tiktok.com/*",
-      "https://kick.com/*",
-      "https://www.twitch.tv/*",
-      "https://dashboard.kick.com/*",
-      "https://livecenter.tiktok.com/*"
-    ],
-    "js": ["protobuf.min.js", "content.js"],
-    "run_at": "document_start"
-  }],
-  "web_accessible_resources": [{
-    "resources": ["injected.js", "protobuf.min.js", "data.proto"],
-    "matches": [
-      "https://www.tiktok.com/*",
-      "https://kick.com/*",
-      "https://www.twitch.tv/*",
-      "https://dashboard.kick.com/*",
-      "https://livecenter.tiktok.com/*"
-    ]
-  }],
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["https://*/*", "http://*/*"]
+    }
+  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self';"
+    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

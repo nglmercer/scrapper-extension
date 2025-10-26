@@ -1,267 +1,424 @@
-// Mantén tu función openTab como estaba
-function openTab(evt, tabName) {
-  let i, tabcontent, tablinks;
+// popup.js - Enhanced popup script with proper background communication
+(() => {
+  "use strict";
 
-  // Ocultar todo el contenido de las pestañas
-  tabcontent = document.getElementsByClassName("tabcontent");
-  for (i = 0; i < tabcontent.length; i++) {
-    tabcontent[i].style.display = "none";
+  console.log("RAW Interceptor: Enhanced popup script started");
+
+  // DOM elements cache
+  const elements = {
+    // Tab buttons
+    tabButtons: document.querySelectorAll(".tablink"),
+    tabContents: document.querySelectorAll(".tabcontent"),
+
+    // General settings
+    masterSwitch: document.getElementById("masterSwitch"),
+    WebhookOption: document.getElementById("WebhookOption"),
+    WebhookUrl: document.getElementById("WebhookUrl"),
+    OpenWindow: document.getElementById("OpenWindow"),
+    WindowUrl: document.getElementById("WindowUrl"),
+
+    // Advanced settings
+    debugMode: document.getElementById("debugMode"),
+    eventBufferSize: document.getElementById("eventBufferSize"),
+
+    // WebSocket filter settings
+    wsEnabled: document.getElementById("wsEnabled"),
+    wsUrlFilters: document.getElementById("wsUrlFilters"),
+    wsMinSize: document.getElementById("wsMinSize"),
+    wsMaxSize: document.getElementById("wsMaxSize"),
+    wsExcludeStrings: document.getElementById("wsExcludeStrings"),
+
+    // Buttons
+    saveAdvanced: document.getElementById("saveAdvanced"),
+    resetAdvanced: document.getElementById("resetAdvanced"),
+    saveFilters: document.getElementById("saveFilters"),
+    resetFilters: document.getElementById("resetFilters"),
+    exportConfig: document.getElementById("exportConfig"),
+    importConfig: document.getElementById("importConfig"),
+
+    // Status
+    status: document.getElementById("status"),
+  };
+
+  // Default configuration
+  const defaultConfig = {
+    WebhookUrl: "",
+    WebhookOption: false,
+    WindowUrl: "https://nglmercer.github.io/multistreamASTRO/chat",
+    OpenWindow: false,
+    debugMode: false,
+    eventBufferSize: 1000,
+    masterSwitch: true,
+    // Interceptor specific settings
+    masterSwitch: true,
+    debugMode: true,
+    websockets: {
+      enabled: true,
+      urlFilters: [
+        "webcast",
+        "tiktok.com",
+        "im-ws",
+        "pusher",
+        "irc-ws.chat.twitch.tv",
+      ],
+      minSize: 10,
+      maxSize: 10000,
+      excludeStrings: ["hi", "pong", "ping"],
+    },
+  };
+
+  let currentConfig = { ...defaultConfig };
+  let backgroundPort = null;
+
+  // Initialize tabs
+  function initTabs() {
+    elements.tabButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const tabName = button.dataset.tab;
+
+        // Update active states
+        elements.tabButtons.forEach((btn) => btn.classList.remove("active"));
+        elements.tabContents.forEach(
+          (content) => (content.style.display = "none"),
+        );
+
+        button.classList.add("active");
+        document.getElementById(tabName).style.display = "block";
+      });
+    });
+
+    // Set first tab as active by default
+    if (elements.tabButtons[0]) {
+      elements.tabButtons[0].click();
+    }
   }
 
-  // Quitar la clase "active" de todos los botones de pestaña
-  tablinks = document.getElementsByClassName("tablink");
-  for (i = 0; i < tablinks.length; i++) {
-    tablinks[i].className = tablinks[i].className.replace(" active", "");
+  // Show status message
+  function showStatus(message, type = "info") {
+    elements.status.textContent = message;
+    elements.status.className = `status status-${type}`;
+    elements.status.style.display = "block";
+
+    setTimeout(() => {
+      elements.status.style.display = "none";
+    }, 3000);
   }
 
-  // Mostrar el contenido de la pestaña actual y marcar el botón como activo
-  document.getElementById(tabName).style.display = "block";
-  evt.currentTarget.className += " active";
-}
+  // Save configuration to storage and update background
+  async function saveConfig(config) {
+    try {
+      // Save to local storage
+      await chrome.storage.local.set(config);
 
-function initializetabs() {
-  const tabIds = ["general", "avanzado", "apariencia"];
-  tabIds.forEach((id) => {
-    const elementName = "openTab" + id;
-    const button = document.getElementById(elementName);
-    console.log("button", button, elementName);
-    // Verificamos que el botón exista antes de asignarle un evento
-    if (button) {
-      // Usamos addEventListener que es la práctica recomendada
-      button.addEventListener("click", function (event) {
-        // 'event' aquí es el objeto real del evento de clic
-        openTab(event, id);
+      // Send update to background script
+      if (backgroundPort) {
+        backgroundPort.postMessage({
+          type: "UPDATE_CONFIG",
+          config: config,
+        });
+      } else {
+        // Fallback to direct message
+        chrome.runtime.sendMessage({
+          type: "UPDATE_CONFIG",
+          config: config,
+        });
+      }
+
+      showStatus("Configuration saved successfully", "success");
+      return true;
+    } catch (error) {
+      console.error("Error saving config:", error);
+      showStatus("Error saving configuration", "error");
+      return false;
+    }
+  }
+
+  // Load configuration from storage
+  async function loadConfig() {
+    try {
+      const result = await chrome.storage.local.get(Object.keys(defaultConfig));
+      currentConfig = { ...defaultConfig, ...result };
+      updateUI();
+      return currentConfig;
+    } catch (error) {
+      console.error("Error loading config:", error);
+      showStatus("Error loading configuration", "error");
+      return defaultConfig;
+    }
+  }
+
+  // Update UI elements with current config
+  function updateUI() {
+    console.log("Updating UI with config:", currentConfig);
+
+    // General settings
+    if (elements.masterSwitch)
+      elements.masterSwitch.checked = currentConfig.masterSwitch ?? true;
+    if (elements.WebhookOption)
+      elements.WebhookOption.checked = currentConfig.WebhookOption || false;
+    if (elements.WebhookUrl)
+      elements.WebhookUrl.value = currentConfig.WebhookUrl || "";
+    if (elements.OpenWindow)
+      elements.OpenWindow.checked = currentConfig.OpenWindow || false;
+    if (elements.WindowUrl)
+      elements.WindowUrl.value = currentConfig.WindowUrl || "";
+
+    // Advanced settings
+    if (elements.debugMode)
+      elements.debugMode.checked = currentConfig.debugMode ?? false;
+    if (elements.eventBufferSize)
+      elements.eventBufferSize.value = currentConfig.eventBufferSize || 1000;
+
+    // WebSocket settings
+    if (elements.wsEnabled)
+      elements.wsEnabled.checked = currentConfig.websockets?.enabled ?? true;
+    if (elements.wsUrlFilters)
+      elements.wsUrlFilters.value = (
+        currentConfig.websockets?.urlFilters || []
+      ).join("\n");
+    if (elements.wsMinSize)
+      elements.wsMinSize.value = currentConfig.websockets?.minSize || 10;
+    if (elements.wsMaxSize)
+      elements.wsMaxSize.value = currentConfig.websockets?.maxSize || 10000;
+    if (elements.wsExcludeStrings)
+      elements.wsExcludeStrings.value = (
+        currentConfig.websockets?.excludeStrings || []
+      ).join(",");
+
+    // Update visibility based on switches
+    updateFieldVisibility();
+  }
+
+  // Update field visibility based on switch states
+  function updateFieldVisibility() {
+    const webhookContainer = document.getElementById("WebhookOption_container");
+    if (webhookContainer) {
+      webhookContainer.style.display = currentConfig.WebhookOption
+        ? "flex"
+        : "none";
+    }
+
+    const windowContainer = document.getElementById("OpenWindow_container");
+    if (windowContainer) {
+      windowContainer.style.display = currentConfig.OpenWindow
+        ? "flex"
+        : "none";
+    }
+  }
+
+  // Get config from UI
+  function getConfigFromUI() {
+    const config = {
+      ...currentConfig,
+      masterSwitch: elements.masterSwitch?.checked ?? true,
+      WebhookOption: elements.WebhookOption?.checked || false,
+      WebhookUrl: elements.WebhookUrl?.value || "",
+      OpenWindow: elements.OpenWindow?.checked || false,
+      WindowUrl: elements.WindowUrl?.value || "",
+      debugMode: elements.debugMode?.checked ?? false,
+      eventBufferSize: parseInt(elements.eventBufferSize?.value) || 1000,
+      websockets: {
+        enabled: elements.wsEnabled?.checked ?? true,
+        urlFilters:
+          elements.wsUrlFilters?.value
+            .split("\n")
+            .map((s) => s.trim())
+            .filter((s) => s) || [],
+        minSize: parseInt(elements.wsMinSize?.value) || 10,
+        maxSize: parseInt(elements.wsMaxSize?.value) || 10000,
+        excludeStrings:
+          elements.wsExcludeStrings?.value
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s) || [],
+      },
+    };
+
+    console.log("Config from UI:", config);
+    return config;
+  }
+
+  // Reset to default configuration
+  async function resetToDefault() {
+    currentConfig = { ...defaultConfig };
+    updateUI();
+    await saveConfig(currentConfig);
+    showStatus("Reset to default configuration", "success");
+  }
+
+  // Export configuration
+  function exportConfig() {
+    const configToExport = getConfigFromUI();
+    const blob = new Blob([JSON.stringify(configToExport, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "raw-websocket-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus("Configuration exported", "success");
+  }
+
+  // Import configuration
+  function importConfig() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        try {
+          const text = await file.text();
+          const importedConfig = JSON.parse(text);
+          currentConfig = { ...defaultConfig, ...importedConfig };
+          updateUI();
+          await saveConfig(currentConfig);
+          showStatus("Configuration imported", "success");
+        } catch (error) {
+          console.error("Import error:", error);
+          showStatus("Error importing configuration", "error");
+        }
+      }
+    };
+    input.click();
+  }
+
+  // Connect to background script
+  function connectToBackground() {
+    try {
+      backgroundPort = chrome.runtime.connect({ name: "popup" });
+
+      backgroundPort.onMessage.addListener((message) => {
+        console.log("Received message from background:", message);
+
+        if (message.type === "CONFIG_UPDATE") {
+          currentConfig = { ...currentConfig, ...message.config };
+          updateUI();
+          showStatus("Configuration updated", "info");
+        } else if (message.type === "RAW_DATA_EVENT") {
+          // Update real-time stats if needed
+          console.log("Received WebSocket data:", message.payload);
+        }
+      });
+
+      backgroundPort.onDisconnect.addListener(() => {
+        console.log("Disconnected from background");
+        backgroundPort = null;
+      });
+
+      // Request current config when connecting
+      setTimeout(() => {
+        if (backgroundPort) {
+          backgroundPort.postMessage({ type: "GET_CONFIG" });
+        }
+      }, 100);
+    } catch (error) {
+      console.error("Failed to connect to background:", error);
+    }
+  }
+
+  // Event listeners
+  function initEventListeners() {
+    // Switch toggles
+    if (elements.masterSwitch) {
+      elements.masterSwitch.addEventListener("change", async () => {
+        currentConfig.masterSwitch = elements.masterSwitch.checked;
+        await saveConfig(currentConfig);
       });
     }
-  });
-  console.log("initializetabs");
 
-  console.log("tabIds", "openTab", { tabIds, openTab });
-}
-// --- 1. Renderiza un formulario por cada plataforma ---
-function renderPlatformForm(platformName, labelText) {
-  const container = document.getElementById('platformForms');
-
-  const formEl = document.createElement('form');
-  formEl.className = 'redirect-form';
-  formEl.dataset.platform = platformName;
-
-  const labelEl = document.createElement('label');
-  const h3El = document.createElement('h3');
-  h3El.textContent = labelText; // Uso seguro de textContent
-
-  const inputEl = document.createElement('input');
-  inputEl.type = 'text';
-  inputEl.placeholder = 'Ingresa el nombre del canal';
-
-  const buttonEl = document.createElement('button');
-  buttonEl.className = 'btn-save';
-  buttonEl.type = 'submit';
-  buttonEl.textContent = 'Go';
-
-  labelEl.appendChild(h3El);
-  labelEl.appendChild(inputEl);
-  formEl.appendChild(labelEl);
-  formEl.appendChild(buttonEl);
-
-  container.appendChild(formEl);
-  attachRedirectListener(formEl, platformName);
-}
-
-// --- 2. Engancha el listener a un formulario ya renderizado ---
-function attachRedirectListener(formEl, platformName) {
-  const URLS = {
-    kick:   u => `https://kick.com/${u}`,
-    twitch: u => `https://twitch.tv/${u}`,
-    tiktok: u => `https://tiktok.com/@${u}/live`,
-  };
-
-  const input = formEl.querySelector('input');
-
-  // Pre-fill desde localStorage (usamos la misma clave para todos)
-  input.value = localStorage.getItem('uniqueId_channel') || '';
-
-  formEl.addEventListener('submit', e => {
-    e.preventDefault();
-    const username = input.value.trim();
-    if (!username) return;
-
-    localStorage.setItem('uniqueId_channel', username);
-    const url = URLS[platformName](username);
-    console.log(url);
-    window.open(url, '_blank');
-  });
-}
-
-
-async function redirectToTikTok(value) {
-  if (!value) return;
-  const urlBase = "https://www.tiktok.com/@{uniqueId}/live";
-  const redirect = urlBase.replace("{uniqueId}", value);
-  if (!chrome?.tabs) {
-    console.error("chrome.tabs no está disponible");
-    return;
-  }
-  try {
-    // Para nueva pestaña
-    await chrome.tabs.create({ url: redirect });
-
-    // O para redirigir pestaña actual
-    // const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    // await chrome.tabs.update(tab.id, { url: redirect });
-  } catch (error) {
-    console.error("Error al redirigir:", error);
-  }
-}
-/**
- * Array de configuración. Cada objeto define un grupo de elementos a gestionar.
- * Aquí hemos puesto la configuración de tu Webhook.
- */
-const optionsConfig = [
-  {
-    optionId: "WebhookOption", // El ID de tu checkbox
-    containerId: "WebhookOption_container", // El ID del contenedor a ocultar/mostrar
-    inputId: "WebhookUrl", // El ID de tu campo de texto
-    defaultInput: "", // Valor por defecto para el campo de texto
-    storageKey: "WebhookUrl", // La clave para guardar la URL en el storage
-    optionStorageKey: "WebhookOption", // La clave para guardar el estado (on/off) en el storage
-  },
-  {
-    optionId: "OpenWindow", // El ID de tu checkbox
-    containerId: "OpenWindow_container", // El ID del contenedor a ocultar/mostrar
-    inputId: "WindowUrl", // El ID de tu campo de texto
-    defaultInput: "https://nglmercer.github.io/multistreamASTRO/chat", // Valor por defecto para el campo de texto
-    storageKey: "WindowUrl", // La clave para guardar la URL en el storage
-    optionStorageKey: "OpenWindow", // La clave para guardar el estado (on/off) en el storage
-  },
-  // ¡Añade aquí más objetos para nuevas opciones!
-  // {
-  //     optionId: "OtraOpcion",
-  //     containerId: "otro_container",
-  //     inputId: "OtroInput",
-  //     storageKey: "otroValor",
-  //     optionStorageKey: "OtraOpcion"
-  // }
-];
-
-/**
- * Función genérica que configura los listeners para cualquier opción definida en el array.
- * @param {object} config - Un objeto del array optionsConfig.
- */
-function setupOptionListeners(config) {
-  const optionCheckbox = document.getElementById(config.optionId);
-  const container = document.getElementById(config.containerId);
-  const inputField = document.getElementById(config.inputId);
-
-  // Si algún elemento esencial no se encuentra, salta esta configuración.
-  if (!optionCheckbox || !container || !inputField) {
-    console.warn(
-      `Advertencia: Faltan elementos para la configuración con ID "${config.optionId}".`
-    );
-    return;
-  }
-
-  // 1. Lógica para mostrar/ocultar el contenedor
-  const toggleContainerVisibility = () => {
-    container.style.display = optionCheckbox.checked ? "flex" : "none";
-  };
-
-  // Recupera y establece el estado inicial del checkbox
-  optionCheckbox.checked =
-    window.localStorage.getItem(config.optionStorageKey) === "true";
-  toggleContainerVisibility(); // Muestra u oculta el contenedor al cargar
-
-  // Listener para cuando cambia el checkbox
-  optionCheckbox.addEventListener("change", () => {
-    const isChecked = optionCheckbox.checked;
-    toggleContainerVisibility();
-    window.localStorage.setItem(config.optionStorageKey, isChecked);
-    chrome.storage.local.set({ [config.optionStorageKey]: isChecked });
-  });
-
-  // 2. Lógica para guardar el valor del campo de texto
-  // Recupera y establece el valor inicial del input
-  inputField.value =
-    window.localStorage.getItem(config.storageKey) || config.defaultInput || "";
-    chrome.storage.local.set({ [config.storageKey]: inputField.value });
-  // Listener para cuando cambia el input
-  inputField.addEventListener("change", () => {
-    const value = inputField.value;
-    window.localStorage.setItem(config.storageKey, value);
-    chrome.storage.local.set({ [config.storageKey]: value });
-  });
-}
-function resetOptions(arrayStrings) {
-    if (!arrayStrings || !Array.isArray(arrayStrings)) {
-        console.error("Error: El argumento debe ser un array de strings.");
-        return;
+    if (elements.WebhookOption) {
+      elements.WebhookOption.addEventListener("change", () => {
+        currentConfig.WebhookOption = elements.WebhookOption.checked;
+        updateFieldVisibility();
+      });
     }
-    
-    chrome.storage.local.remove(arrayStrings);
-    arrayStrings.forEach(key => window.localStorage.removeItem(key));
-    const resetElements = arrayStrings
-        .map((key) => {
-        return document.getElementById(key);
-        })
-        .filter(Boolean); // Filtra los elementos que no son falsy
-    resetElements.forEach((element) => {
-        if (element.type === "checkbox") {
-            element.checked = false;
-            const container = document.getElementById(`${element.id}_container`);
-            if (container) {
-                container.style.display = "none";
-            }
-        } else if (element.type === "text") {
-            element.value = "";
-        }
-    });
-}
-/**
- * Función principal que recorre todas las configuraciones y las inicializa.
- */
-function initializeFormOptions() {
-  optionsConfig.forEach(setupOptionListeners);
-}
-const popupPorts = new Set();
 
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name === "popup") {
-    popupPorts.add(port);
-    port.onDisconnect.addListener(() => {
-      popupPorts.delete(port);
-    });
-  }
-});
-// Recibir mensajes de content scripts
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type) {
-    // Reenviar a todos los popups conectados
-    popupPorts.forEach(port => {
-      try {
-        port.postMessage(message);
-      } catch (error) {
-        popupPorts.delete(port);
+    if (elements.OpenWindow) {
+      elements.OpenWindow.addEventListener("change", () => {
+        currentConfig.OpenWindow = elements.OpenWindow.checked;
+        updateFieldVisibility();
+      });
+    }
+
+    // Save buttons
+    if (elements.saveAdvanced) {
+      elements.saveAdvanced.addEventListener("click", async () => {
+        const config = getConfigFromUI();
+        await saveConfig(config);
+      });
+    }
+
+    if (elements.saveFilters) {
+      elements.saveFilters.addEventListener("click", async () => {
+        const config = getConfigFromUI();
+        await saveConfig(config);
+      });
+    }
+
+    // Reset buttons
+    if (elements.resetAdvanced) {
+      elements.resetAdvanced.addEventListener("click", resetToDefault);
+    }
+
+    if (elements.resetFilters) {
+      elements.resetFilters.addEventListener("click", resetToDefault);
+    }
+
+    // Export/Import buttons
+    if (elements.exportConfig) {
+      elements.exportConfig.addEventListener("click", exportConfig);
+    }
+
+    if (elements.importConfig) {
+      elements.importConfig.addEventListener("click", importConfig);
+    }
+
+    // Real-time updates for text inputs
+    const textInputs = [
+      elements.WebhookUrl,
+      elements.WindowUrl,
+      elements.eventBufferSize,
+      elements.wsUrlFilters,
+      elements.wsMinSize,
+      elements.wsMaxSize,
+      elements.wsExcludeStrings,
+    ];
+
+    textInputs.forEach((input) => {
+      if (input) {
+        let timeout;
+        input.addEventListener("input", async () => {
+          clearTimeout(timeout);
+          timeout = setTimeout(async () => {
+            const config = getConfigFromUI();
+            await saveConfig(config);
+          }, 1000); // Debounce save after 1 second
+        });
       }
     });
   }
-});
-document.addEventListener("DOMContentLoaded", () => {
-  initializetabs();
-  // --- 3. Inicialización ---
-  ['kick', 'tiktok'].forEach(p => {
-    renderPlatformForm(
-      p,
-      `Redirigir a un canal (${p.charAt(0).toUpperCase() + p.slice(1)})`
-    );
-  });
-  initializeFormOptions();
-  const resetButton = document.getElementById("resetButton");
-  resetButton.addEventListener("click", () => {
-    resetOptions(optionsConfig.map((config) => config.optionStorageKey));
-    resetOptions(optionsConfig.map((config) => config.storageKey));
-  });
-});
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-  const { type, payload } = request;
-  console.log("popup", request);
-});
+
+  // Initialize popup
+  async function init() {
+    try {
+      initTabs();
+      initEventListeners();
+      connectToBackground();
+      await loadConfig();
+      console.log("Popup initialized successfully");
+    } catch (error) {
+      console.error("Failed to initialize popup:", error);
+      showStatus("Failed to initialize popup", "error");
+    }
+  }
+
+  // Start initialization when DOM is ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
