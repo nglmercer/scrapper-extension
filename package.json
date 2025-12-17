@@ -30,7 +30,6 @@
   ],
   "scripts": {
     "build": "bun run build-simple.js",
-    "build:legacy": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs",
     "build:clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "bun build src/index.ts --outdir dist --format esm --target browser --splitting",
@@ -40,19 +39,8 @@
     "build:electron": "bun build src/platforms/electron/index.ts --outdir dist/platforms/electron --format cjs --target node",
     "build:all": "bun run build && bun run build:chrome && bun run build:firefox && bun run build:electron",
     "test": "bun test",
-    "test:unit": "bun test tests/unit",
-    "test:integration": "bun test tests/integration",
-    "test:coverage": "bun test --coverage",
-    "test:watch": "bun test --watch",
-    "lint": "eslint src tests --ext .ts,.js",
-    "lint:fix": "eslint src tests --ext .ts,.js --fix",
     "type-check": "tsc --noEmit",
-    "type-check:tests": "tsc --noEmit -p tsconfig.test.json",
-    "dev": "bun run build:types && bun run test:watch",
-    "prepublishOnly": "bun run build && bun run test",
-    "extension:chrome": "bun run build:chrome && cp -r dist/platforms/chrome/* . && cp manifest.json dist/",
-    "extension:firefox": "bun run build:firefox && cp -r dist/platforms/firefox/* . && cp manifest-firefox.json dist/",
-    "extension:electron": "bun run build:electron && cp -r dist/platforms/electron/* . && cp package-electron.json dist/"
+    "type-check:tests": "tsc --noEmit -p tsconfig.test.json"
   },
   "keywords": [
     "websocket",

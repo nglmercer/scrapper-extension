@@ -305,13 +305,13 @@ export class ChromeRuntimePolyfill implements ChromeRuntime {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
       // Use real Chrome API
       if (typeof messageOrExtensionId === 'string') {
-        return chrome.runtime.sendMessage(messageOrExtensionId, messageOrCallback, callback as (response: unknown) => void);
+        return chrome.runtime.sendMessage(messageOrExtensionId, messageOrCallback, callback!);
       } else {
         return chrome.runtime.sendMessage(messageOrExtensionId, messageOrCallback);
       }
     } else {
       // Fallback to mock implementation
-      return this.mockRuntime.sendMessage(messageOrExtensionId as string, messageOrCallback, callback as (response: unknown) => void);
+      return this.mockRuntime.sendMessage(messageOrExtensionId as string, messageOrCallback, callback!);
     }
   }
 
