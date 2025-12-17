@@ -26,7 +26,7 @@
     "noPropertyAccessFromIndexSignature": false,
 
     // Extension specific
-    "types": ["chrome"],
+    "types": ["chrome", "node", "bun-types"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

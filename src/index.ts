@@ -225,7 +225,6 @@ export class RAWInterceptor {
     this.storage.onChanged((changes: StorageChanges) => {
       // Handle configuration changes
       if (changes.masterSwitch || changes.debugMode || changes.websockets) {
-        console.log('Configuration changed externally, updating interceptor');
         
         // Reload config from storage
         this.storage.loadConfig().then((config: InterceptorConfig) => {

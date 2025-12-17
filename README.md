@@ -1,260 +1,364 @@
 # RAW Data Interceptor
 
-A cross-platform TypeScript library for intercepting WebSocket data in Chrome extensions, Firefox add-ons, and Electron applications. Built with Bun and designed for maximum compatibility across different browser environments.
+A powerful, cross-platform WebSocket data interceptor for Chrome, Firefox, and Electron applications. Designed to capture, analyze, and process WebSocket communications in real-time.
 
-## Features
+## 🚀 Features
 
-- 🔌 **Cross-Platform Support**: Works in Chrome, Firefox, and Electron
-- 🚀 **TypeScript First**: Full TypeScript support with comprehensive type definitions
-- 🧪 **Well Tested**: Comprehensive test suite using Bun's built-in test runner
-- 📦 **Modern Build**: Uses Bun for fast builds and development
-- 🔧 **Configurable**: Flexible configuration system with storage persistence
-- 🎯 **WebSocket Interception**: Specialized for WebSocket data capture and analysis
-- 🔄 **Real-time Updates**: Configuration changes apply in real-time
-- 🛡️ **Error Handling**: Robust error handling with fallback mechanisms
+- **Cross-Platform Support**: Works seamlessly across Chrome extensions, Firefox add-ons, and Electron applications
+- **Real-Time Interception**: Capture WebSocket messages as they happen
+- **Flexible Filtering**: Filter messages by URL, size, and content
+- **Multiple Data Types**: Support for text, JSON, binary, and ArrayBuffer data
+- **Performance Optimized**: Minimal overhead with efficient message processing
+- **Comprehensive Testing**: Includes WebSocket test server and integration tests
+- **TypeScript Support**: Full TypeScript definitions and type safety
+- **Extensible Architecture**: Easy to add custom message handlers and processors
 
-## Installation
+## 📦 Installation
 
 ```bash
-# Using Bun (recommended)
-bun add raw-data-interceptor
-
-# Using npm
 npm install raw-data-interceptor
-
-# Using yarn
-yarn add raw-data-interceptor
 ```
 
-## Quick Start
-
-```typescript
-import { RAWInterceptor } from 'raw-data-interceptor';
-
-// Create interceptor instance
-const interceptor = new RAWInterceptor();
-
-// Initialize with configuration
-await interceptor.initialize();
-
-// Listen for WebSocket messages
-const unsubscribe = interceptor.onMessage((message) => {
-  console.log('WebSocket message:', message);
-});
-
-// Update configuration
-await interceptor.updateConfig({
-  enabled: true,
-  filters: {
-    urlPatterns: ['*://api.example.com/*'],
-    minSize: 100,
-    maxSize: 10000
-  }
-});
-
-// Clean up
-await interceptor.destroy();
-```
-
-## Configuration
-
-The interceptor supports comprehensive configuration options:
-
-```typescript
-interface InterceptorConfig {
-  masterSwitch: boolean;        // Master on/off switch
-  debugMode: boolean;           // Enable debug logging
-  enabled: boolean;             // Enable/disable interception
-  filters: {
-    urlPatterns: string[];      // URL patterns to intercept
-    minSize: number;            // Minimum message size
-    maxSize: number;            // Maximum message size
-    contentType: string;        // Content type filter
-    excludeStrings: string[];   // Strings to exclude
-  };
-  WebhookUrl: string;           // Webhook URL for notifications
-  WebhookOption: boolean;       // Enable webhook notifications
-  WindowUrl: string;            // Window URL for display
-  OpenWindow: boolean;          // Open window on intercept
-  eventBufferSize: number;      // Buffer size for events
-}
-```
-
-## Platform-Specific Usage
+## 🔧 Platform-Specific Usage
 
 ### Chrome Extension
 
-```typescript
-import { RAWInterceptor } from 'raw-data-interceptor';
+```javascript
+// background.js
+import { rawInterceptor, ChromeBackgroundHelper } from 'raw-data-interceptor/chrome';
 
-// The interceptor automatically detects Chrome APIs
-const interceptor = new RAWInterceptor();
-await interceptor.initialize();
+async function initialize() {
+  await rawInterceptor.initialize();
+  ChromeBackgroundHelper.initialize();
+  
+  // Listen for intercepted messages
+  rawInterceptor.onMessage((message) => {
+    console.log('Intercepted WebSocket message:', message);
+  });
+}
 
-// Configuration is automatically persisted to chrome.storage
+// content.js
+import { ChromeContentHelper } from 'raw-data-interceptor/chrome';
+
+ChromeContentHelper.initialize();
 ```
 
-### Firefox Add-on
+### Firefox Extension
 
-```typescript
-import { RAWInterceptor } from 'raw-data-interceptor';
+```javascript
+// background.js
+import { rawInterceptor, FirefoxBackgroundHelper } from 'raw-data-interceptor/firefox';
 
-// Works with Firefox WebExtension APIs
-const interceptor = new RAWInterceptor();
-await interceptor.initialize();
+async function initialize() {
+  await rawInterceptor.initialize();
+  FirefoxBackgroundHelper.initialize();
+  
+  // Listen for intercepted messages
+  rawInterceptor.onMessage((message) => {
+    console.log('Intercepted WebSocket message:', message);
+  });
+}
+
+// content.js
+import { FirefoxContentHelper } from 'raw-data-interceptor/firefox';
+
+FirefoxContentHelper.initialize();
 ```
 
 ### Electron Application
 
-```typescript
-import { RAWInterceptor } from 'raw-data-interceptor';
+```javascript
+// Main process
+import { rawInterceptor, ElectronMainHelper } from 'raw-data-interceptor/electron';
 
-// Works in Electron main or renderer process
-const interceptor = new RAWInterceptor();
-await interceptor.initialize();
+async function initialize() {
+  await rawInterceptor.initialize();
+  ElectronMainHelper.setupIpcHandlers();
+  
+  // Listen for intercepted messages
+  rawInterceptor.onMessage((message) => {
+    console.log('Intercepted WebSocket message:', message);
+  });
+}
+
+// Renderer process
+import { ElectronRendererHelper } from 'raw-data-interceptor/electron';
+
+ElectronRendererHelper.initialize();
 ```
 
-### Node.js/Testing
+## 🛠️ Configuration
 
-```typescript
-import { RAWInterceptor } from 'raw-data-interceptor';
+```javascript
+const config = {
+  masterSwitch: true,           // Global on/off switch
+  debugMode: false,             // Enable debug logging
+  WebhookUrl: '',               // URL for webhook notifications
+  WebhookOption: false,         // Enable webhook notifications
+  WindowUrl: 'https://example.com/chat', // URL for external window
+  OpenWindow: false,            // Open external window for data
+  eventBufferSize: 1000,        // Buffer size for events
+  websockets: {
+    enabled: true,              // Enable WebSocket interception
+    urlFilters: ['webcast', 'tikfinity'], // Filter by URL patterns
+    minSize: 10,                // Minimum message size
+    maxSize: 10000,             // Maximum message size
+    excludeStrings: ['ping', 'pong'] // Exclude messages containing these strings
+  }
+};
 
-// Automatically uses mock implementations for testing
-const interceptor = new RAWInterceptor();
-await interceptor.initialize();
+await rawInterceptor.updateConfig(config);
 ```
 
-## API Reference
+## 📊 API Reference
 
-### RAWInterceptor Class
+### Core Methods
 
-#### Constructor
-```typescript
-const interceptor = new RAWInterceptor();
+```javascript
+// Initialize the interceptor
+await rawInterceptor.initialize();
+
+// Get current statistics
+const stats = rawInterceptor.getStats();
+// Returns: { totalIntercepts, totalConnections, activeConnections, platform, runtime }
+
+// Get active connections
+const connections = rawInterceptor.getConnections();
+// Returns: Array of connection info objects
+
+// Listen for intercepted messages
+const unsubscribe = rawInterceptor.onMessage((message) => {
+  console.log('Message:', message);
+});
+
+// Toggle debug mode
+const debugMode = rawInterceptor.toggleDebugMode();
+
+// Toggle master switch
+const enabled = rawInterceptor.toggleMasterSwitch();
+
+// Update configuration
+await rawInterceptor.updateConfig(newConfig);
+
+// Clean up
+await rawInterceptor.destroy();
 ```
 
-#### Methods
+### Message Format
 
-- `initialize(): Promise<void>` - Initialize the interceptor
-- `destroy(): Promise<void>` - Clean up resources
-- `getConfig(): InterceptorConfig` - Get current configuration
-- `updateConfig(config: Partial<InterceptorConfig>): Promise<void>` - Update configuration
-- `resetConfig(): Promise<void>` - Reset to default configuration
-- `getStats(): InterceptorStats` - Get interception statistics
-- `getConnections(): ConnectionInfo[]` - Get active connections
-- `toggleDebugMode(): boolean` - Toggle debug mode
-- `toggleMasterSwitch(): boolean` - Toggle master switch
-- `onMessage(callback: (message: WebSocketMessage) => void): () => void` - Listen for messages
-- `isEnabled(): boolean` - Check if enabled
-- `isDebugMode(): boolean` - Check if debug mode is active
+Intercepted messages have the following structure:
 
-## Development
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/your-username/raw-data-interceptor.git
-cd raw-data-interceptor
-
-# Install dependencies
-bun install
-
-# Run tests
-bun test
-
-# Build the project
-bun run build
-
-# Build for different platforms
-bun run build:chrome
-bun run build:firefox
-bun run build:electron
+```javascript
+{
+  type: 'message',        // 'open', 'message', 'close', 'error'
+  connectionId: 'ws_123', // Unique connection identifier
+  data: { ... },          // Message data (varies by type)
+  metadata: {
+    platform: 'tiktok',   // Detected platform
+    dataType: 'json',     // 'string', 'arraybuffer', 'blob', 'object'
+    size: 256,            // Message size in bytes
+    url: 'wss://example.com', // Connection URL
+    timestamp: 1234567890 // Unix timestamp
+  },
+  timestamp: 1234567890   // Message timestamp
+}
 ```
 
-### Project Structure
+## 🧪 Testing
 
-```
-src/
-├── core/                    # Core interceptor logic
-│   ├── interceptor.ts      # Main interceptor implementation
-│   └── storage.ts          # Cross-platform storage abstraction
-├── platforms/              # Platform-specific implementations
-│   └── chrome/            # Chrome API polyfills
-│       ├── storage-polyfill.ts
-│       └── runtime-polyfill.ts
-├── types/                  # TypeScript type definitions
-│   └── index.ts
-├── utils/                  # Utility functions
-└── index.ts               # Main entry point
-
-tests/
-├── unit/                   # Unit tests
-└── integration/            # Integration tests
-
-dist/                       # Built output
-├── index.js               # Main bundle
-├── index.d.ts             # TypeScript declarations
-└── platforms/             # Platform-specific builds
-```
-
-### Testing
-
-The project includes comprehensive tests using Bun's built-in test runner:
+The package includes comprehensive tests and a WebSocket test server:
 
 ```bash
 # Run all tests
-bun test
+npm test
 
 # Run unit tests only
-bun test tests/unit
+npm run test:unit
 
-# Run specific test file
-bun test tests/unit/interceptor.test.ts
+# Run integration tests
+npm run test:integration
 
 # Run with coverage
-bun test --coverage
+npm run test:coverage
+
+# Start WebSocket test server
+npm run test:server
 ```
 
-## Browser Compatibility
+### WebSocket Test Server
 
-- **Chrome**: 88+ (Manifest V3 supported)
-- **Firefox**: 78+ (WebExtension API)
-- **Edge**: 88+ (Chromium-based)
-- **Safari**: 14+ (WebExtension API)
-- **Electron**: 12+ (Chromium 89+)
+A built-in WebSocket test server for development and testing:
 
-## Contributing
+```javascript
+import { WebSocketTestServer } from 'raw-data-interceptor/tests';
+
+const server = new WebSocketTestServer({
+  port: 8080,
+  host: 'localhost',
+  path: '/ws',
+  enableHeartbeat: true,
+  messageTypes: ['text', 'json', 'binary', 'ping', 'chat']
+});
+
+await server.start();
+
+// The server supports various message types and automatic responses
+```
+
+## 🏗️ Building for Different Platforms
+
+```bash
+# Build for all platforms
+npm run build:all
+
+# Build for specific platforms
+npm run build:chrome
+npm run build:firefox
+npm run build:electron
+
+# Build extension packages
+npm run extension:chrome
+npm run extension:firefox
+npm run extension:electron
+```
+
+## 📁 Project Structure
+
+```
+raw-data-interceptor/
+├── src/
+│   ├── core/                    # Core interceptor logic
+│   ├── platforms/               # Platform-specific implementations
+│   │   ├── chrome/             # Chrome extension support
+│   │   ├── firefox/            # Firefox extension support
+│   │   └── electron/           # Electron application support
+│   ├── types/                   # TypeScript definitions
+│   └── utils/                   # Utility functions
+├── tests/
+│   ├── unit/                    # Unit tests
+│   ├── integration/             # Integration tests
+│   └── websocket-test-server.ts # Test server implementation
+├── examples/                    # Usage examples for each platform
+├── dist/                        # Built files
+└── manifest*.json              # Platform-specific manifests
+```
+
+## 🔍 Platform-Specific Features
+
+### Chrome Extension
+- Manifest V3 support
+- Service worker background scripts
+- Content script injection
+- Chrome storage API integration
+- Runtime message passing
+
+### Firefox Extension
+- Manifest V2 support
+- Browser API compatibility
+- Content script injection
+- Firefox storage API integration
+- Runtime message passing
+
+### Electron Application
+- Main process integration
+- Renderer process support
+- IPC communication
+- File-based storage
+- Preload script support
+
+## 🚨 Error Handling
+
+The interceptor includes comprehensive error handling:
+
+```javascript
+try {
+  await rawInterceptor.initialize();
+} catch (error) {
+  console.error('Initialization failed:', error);
+  // Error includes context information
+  console.error('Error context:', error.context);
+}
+```
+
+## 📈 Performance Monitoring
+
+Built-in performance metrics:
+
+```javascript
+const stats = rawInterceptor.getStats();
+console.log(`Processed ${stats.totalIntercepts} messages`);
+console.log(`Active connections: ${stats.activeConnections}`);
+console.log(`Uptime: ${stats.runtime}ms`);
+```
+
+## 🔧 Advanced Usage
+
+### Custom Message Processing
+
+```javascript
+rawInterceptor.onMessage((message) => {
+  // Custom processing logic
+  if (message.type === 'message' && message.data.type === 'chat') {
+    // Process chat messages
+    processChatMessage(message.data);
+  }
+});
+```
+
+### Platform Detection
+
+The interceptor automatically detects the platform:
+
+```javascript
+// Supported platforms: 'tiktok', 'kick', 'twitch', 'youtube', 'unknown'
+const platform = rawInterceptor.getStats().platform;
+```
+
+### Filtering Examples
+
+```javascript
+// Filter by URL patterns
+config.websockets.urlFilters = ['webcast', 'tikfinity', 'twitch'];
+
+// Filter by message size
+config.websockets.minSize = 100;
+config.websockets.maxSize = 5000;
+
+// Filter by content
+config.websockets.excludeStrings = ['ping', 'pong', 'heartbeat'];
+```
+
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes and add tests
-4. Run tests: `bun test`
-5. Build the project: `bun run build`
-6. Submit a pull request
+2. Create a feature branch
+3. Add tests for your changes
+4. Ensure all tests pass
+5. Submit a pull request
 
-## License
+## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see LICENSE file for details
 
-## Changelog
+## 🆘 Support
 
-### v1.0.0
-- Initial release
-- Cross-platform WebSocket interception
-- Chrome, Firefox, and Electron support
-- Comprehensive TypeScript definitions
-- Full test coverage
-- Modern Bun-based build system
+- Create an issue on GitHub
+- Check the examples in the `/examples` directory
+- Review the test files for usage patterns
 
-## Support
+## 🔄 Changelog
 
-- 📖 [Documentation](https://github.com/your-username/raw-data-interceptor/wiki)
-- 🐛 [Issue Tracker](https://github.com/your-username/raw-data-interceptor/issues)
-- 💬 [Discussions](https://github.com/your-username/raw-data-interceptor/discussions)
+### v3.1.0
+- Added Firefox platform support
+- Added Electron platform support
+- Enhanced WebSocket test server
+- Improved error handling
+- Added comprehensive integration tests
+- Updated TypeScript definitions
 
-## Related Projects
-
-- [WebSocket Interceptor](https://github.com/example/websocket-interceptor) - Alternative WebSocket interception library
-- [Chrome Extension Boilerplate](https://github.com/example/chrome-extension-boilerplate) - Starter template for Chrome extensions
-- [Firefox Extension Workshop](https://extensionworkshop.com/) - Official Firefox extension development resources
+### v3.0.0
+- Initial cross-platform release
+- Chrome extension support
+- Core WebSocket interception
+- Basic filtering capabilities
+- TypeScript support

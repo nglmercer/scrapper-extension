@@ -26,31 +26,77 @@ class WebSocketConnection {
     public readonly id: string,
     public readonly url: string,
     public readonly protocols: string | string[] | undefined,
-    private interceptor: WebSocketInterceptor
+    private interceptor: WebSocketInterceptor,
+    originalWebSocketConstructor: typeof WebSocket
   ) {
-    this.originalWebSocket = new WebSocket(url, protocols);
+    this.originalWebSocket = new originalWebSocketConstructor(url, protocols);
     this.setupEventListeners();
   }
 
   private setupEventListeners(): void {
-    // Intercept messages
-    this.originalWebSocket.addEventListener('message', (event) => {
+    // Store reference to the original event handlers before replacing them
+    const originalWebSocket = this.originalWebSocket;
+    
+    // Override the event handlers to intercept messages
+    const self = this;
+    
+    // Intercept messages by overriding the onmessage property
+    const originalOnMessage = originalWebSocket.onmessage;
+    originalWebSocket.onmessage = function(event) {
+      self.interceptor.handleMessage(self.id, event);
+      self.notifyHandlers('message', event);
+      if (originalOnMessage) {
+        originalOnMessage.call(this, event);
+      }
+    };
+
+    // Intercept open events
+    const originalOnOpen = originalWebSocket.onopen;
+    originalWebSocket.onopen = function(event) {
+      self.interceptor.handleOpen(self.id, event);
+      self.notifyHandlers('open', event);
+      if (originalOnOpen) {
+        originalOnOpen.call(this, event);
+      }
+    };
+
+    // Intercept close events
+    const originalOnClose = originalWebSocket.onclose;
+    originalWebSocket.onclose = function(event) {
+      self.interceptor.handleClose(self.id, event);
+      self.notifyHandlers('close', event);
+      if (originalOnClose) {
+        originalOnClose.call(this, event);
+      }
+    };
+
+    // Intercept error events
+    const originalOnError = originalWebSocket.onerror;
+    originalWebSocket.onerror = function(event) {
+      self.interceptor.handleError(self.id, event);
+      self.notifyHandlers('error', event);
+      if (originalOnError) {
+        originalOnError.call(this, event);
+      }
+    };
+
+    // Also add event listeners as backup
+    originalWebSocket.addEventListener('message', (event) => {
       this.interceptor.handleMessage(this.id, event);
       this.notifyHandlers('message', event);
     });
 
-    // Intercept other events
-    this.originalWebSocket.addEventListener('open', (event) => {
+    originalWebSocket.addEventListener('open', (event) => {
       this.interceptor.handleOpen(this.id, event);
       this.notifyHandlers('open', event);
     });
 
-    this.originalWebSocket.addEventListener('close', (event) => {
+    originalWebSocket.addEventListener('close', (event) => {
       this.interceptor.handleClose(this.id, event);
       this.notifyHandlers('close', event);
     });
 
-    this.originalWebSocket.addEventListener('error', (event) => {
+    originalWebSocket.addEventListener('error', (event) => {
       this.interceptor.handleError(this.id, event);
       this.notifyHandlers('error', event);
     });
@@ -191,14 +237,54 @@ export class WebSocketInterceptor implements DataInterceptor {
   }
 
   private interceptWebSocket(): void {
-    // Check if we're in a browser environment
-    if (typeof window === 'undefined' || !window.WebSocket) {
+    
+    // Check if we're in a browser environment or test environment
+    const isBrowser = typeof window !== 'undefined' && window.WebSocket;
+    
+    // Use a more robust way to detect test environment
+    const getGlobalObject = () => {
+      if (typeof globalThis !== 'undefined') return globalThis;
+      // @ts-ignore - Web Workers
+      if (typeof self !== 'undefined') return self;
+      if (typeof window !== 'undefined') return window;
+      // @ts-ignore - Node.js global
+      if (typeof global !== 'undefined') return global;
+      return {} as any;
+    };
+    
+    const globalObj = getGlobalObject();
+    const isTestEnvironment = globalObj.WebSocket !== undefined;
+    if (!isBrowser && !isTestEnvironment) {
       console.warn('WebSocket interception not available in this environment');
       return;
     }
 
     const self = this;
-    const OriginalWebSocket = window.WebSocket;
+    let OriginalWebSocket: typeof WebSocket;
+    let targetObject: any;
+
+    if (isBrowser) {
+      OriginalWebSocket = window.WebSocket;
+      targetObject = window;
+    } else {
+      // In test environment, use the global WebSocket or import it
+      try {
+        // Check if WebSocket is available globally first
+        if (globalObj.WebSocket) {
+          OriginalWebSocket = globalObj.WebSocket;
+          targetObject = globalObj;
+        } else {
+          // Try to import ws module
+          // @ts-ignore - Dynamic import for test environment
+          const wsModule = require('ws');
+          OriginalWebSocket = wsModule.WebSocket || wsModule;
+          targetObject = globalObj;
+        }
+      } catch (error) {
+        console.warn('WebSocket module not available in test environment');
+        return;
+      }
+    }
 
     const InterceptedWebSocket = function (url: string | URL, protocols?: string | string[]) {
       const connectionId = `ws_${++self.connectionCounter}`;
@@ -206,6 +292,7 @@ export class WebSocketInterceptor implements DataInterceptor {
       
       // Check if connection should be intercepted
       if (!self.shouldInterceptConnection(urlString)) {
+        console.log('[WebSocket Interceptor] Connection not intercepted, using original WebSocket');
         return new OriginalWebSocket(url, protocols);
       }
 
@@ -213,7 +300,8 @@ export class WebSocketInterceptor implements DataInterceptor {
         connectionId,
         urlString,
         protocols,
-        self
+        self,
+        OriginalWebSocket
       );
 
       self.connections.set(connectionId, connection);
@@ -230,7 +318,7 @@ export class WebSocketInterceptor implements DataInterceptor {
     Object.defineProperty(InterceptedWebSocket, 'CLOSING', { value: OriginalWebSocket.CLOSING });
     Object.defineProperty(InterceptedWebSocket, 'CLOSED', { value: OriginalWebSocket.CLOSED });
 
-    window.WebSocket = InterceptedWebSocket;
+    targetObject.WebSocket = InterceptedWebSocket;
   }
 
   private shouldInterceptConnection(url: string): boolean {
@@ -307,13 +395,14 @@ export class WebSocketInterceptor implements DataInterceptor {
   }
 
   private createMessageMetadata(data: any, url?: string): MessageMetadata {
+    const isBuffer = this.isBuffer(data);
     return {
       platform: this.stats.platform,
       dataType: this.getDataType(data),
       size: this.getDataSize(data),
       url,
       originalType: typeof data,
-      isBinary: data instanceof ArrayBuffer || data instanceof Uint8Array || data instanceof Blob,
+      isBinary: data instanceof ArrayBuffer || data instanceof Uint8Array || data instanceof Blob || isBuffer,
       timestamp: Date.now()
     };
   }
@@ -323,16 +412,28 @@ export class WebSocketInterceptor implements DataInterceptor {
     if (data instanceof ArrayBuffer) return 'arraybuffer';
     if (data instanceof Blob) return 'blob';
     if (data instanceof Uint8Array) return 'arraybuffer';
+    if (this.isBuffer(data)) return 'arraybuffer';
     return 'object';
   }
 
+  private isBuffer(data: any): boolean {
+    try {
+      // Check if Buffer is available and data is a Buffer
+      // @ts-ignore - Buffer might not be available in browser environments
+      return typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(data);
+    } catch {
+      return false;
+    }
+  }
+
   handleOpen(connectionId: string, event: Event): void {
-    if (!this.shouldInterceptConnection('')) return;
+    const connection = this.connections.get(connectionId);
+    if (!connection) return;
 
     const message: WebSocketMessage = {
       type: 'open',
       connectionId,
-      metadata: this.createMessageMetadata(null),
+      metadata: this.createMessageMetadata(null, connection.url),
       timestamp: Date.now()
     };
 
@@ -343,10 +444,34 @@ export class WebSocketInterceptor implements DataInterceptor {
   handleMessage(connectionId: string, event: MessageEvent): void {
     const data = event.data;
     
-    if (!this.shouldInterceptMessage(data)) return;
+    let isBinary = false;
+    
+    // Enhanced binary detection for different data types
+    if (data instanceof ArrayBuffer ||
+        data instanceof Uint8Array ||
+        data instanceof Int8Array ||
+        data instanceof Uint16Array ||
+        data instanceof Int16Array ||
+        data instanceof Uint32Array ||
+        data instanceof Int32Array ||
+        data instanceof Float32Array ||
+        data instanceof Float64Array ||
+        this.isBuffer(data)) {
+      isBinary = true;
+    } else if (data instanceof Blob) {
+      isBinary = true;
+    } else if (data instanceof DataView) {
+      isBinary = true;
+    }
 
+    // Create metadata first to ensure proper binary detection
     const connection = this.connections.get(connectionId);
     const metadata = this.createMessageMetadata(data, connection?.url);
+    
+    // Override isBinary detection - this is crucial for binary data
+    metadata.isBinary = isBinary;
+
+    if (!this.shouldInterceptMessage(data)) return;
 
     const message: WebSocketMessage = {
       type: 'message',
@@ -367,13 +492,11 @@ export class WebSocketInterceptor implements DataInterceptor {
       this.connections.delete(connectionId);
     }
 
-    if (!this.shouldInterceptConnection('')) return;
-
     const message: WebSocketMessage = {
       type: 'close',
       connectionId,
       metadata: {
-        ...this.createMessageMetadata(null),
+        ...this.createMessageMetadata(null, connection?.url),
         event: 'close',
         code: event.code,
         reason: event.reason,
@@ -387,13 +510,13 @@ export class WebSocketInterceptor implements DataInterceptor {
   }
 
   handleError(connectionId: string, event: Event): void {
-    if (!this.shouldInterceptConnection('')) return;
-
+    const connection = this.connections.get(connectionId);
+    
     const message: WebSocketMessage = {
       type: 'error',
       connectionId,
       metadata: {
-        ...this.createMessageMetadata(null),
+        ...this.createMessageMetadata(null, connection?.url),
         event: 'error'
       },
       timestamp: Date.now()
@@ -484,11 +607,22 @@ export class WebSocketInterceptor implements DataInterceptor {
     this.enabled = !this.enabled;
     
     if (this.enabled) {
+      // Re-intercept WebSocket when enabling
       this.interceptWebSocket();
     } else {
-      // Restore original WebSocket if in browser environment
-      if (typeof window !== 'undefined' && window.WebSocket !== this.originalWebSocket) {
-        window.WebSocket = this.originalWebSocket;
+      // Restore original WebSocket
+      const getGlobalObject = () => {
+        if (typeof globalThis !== 'undefined') return globalThis;
+        if (typeof self !== 'undefined') return self;
+        if (typeof window !== 'undefined') return window;
+        // @ts-ignore - Node.js global
+        if (typeof global !== 'undefined') return global;
+        return {} as any;
+      };
+      
+      const globalObj = getGlobalObject();
+      if (globalObj.WebSocket && globalObj.WebSocket !== this.originalWebSocket) {
+        globalObj.WebSocket = this.originalWebSocket;
       }
     }
     
