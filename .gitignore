@@ -1,2 +1,5 @@
-scrapper-extension.zip
-MultistreamExtension.zip
+*.zip
+*.lock
+node_modules
+build
+dist
