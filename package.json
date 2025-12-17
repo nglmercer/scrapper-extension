@@ -36,8 +36,9 @@
     "build:cjs": "bun build src/index.ts --outdir dist --format cjs --target browser",
     "build:chrome": "bun build src/platforms/chrome/index.ts --outdir dist/platforms/chrome --format esm --target browser",
     "build:firefox": "bun build src/platforms/firefox/index.ts --outdir dist/platforms/firefox --format esm --target browser",
+    "build:firefox:extension": "bun build src/platforms/firefox/extension/background.ts --outdir dist/platforms/firefox --format esm --target browser && bun build src/platforms/firefox/extension/content.ts --outdir dist/platforms/firefox --format esm --target browser && bun build src/platforms/firefox/extension/injected.ts --outdir dist/platforms/firefox --format esm --target browser && bun -e \"import fs from 'fs'; fs.copyFileSync('src/platforms/firefox/extension/manifest.json', 'dist/platforms/firefox/manifest.json'); fs.copyFileSync('popup.html', 'dist/platforms/firefox/popup.html'); fs.copyFileSync('popup.js', 'dist/platforms/firefox/popup.js'); fs.copyFileSync('style.css', 'dist/platforms/firefox/style.css'); fs.cpSync('icons', 'dist/platforms/firefox/icons', {recursive: true});\"",
     "build:electron": "bun build src/platforms/electron/index.ts --outdir dist/platforms/electron --format cjs --target node",
-    "build:all": "bun run build && bun run build:chrome && bun run build:firefox && bun run build:electron",
+    "build:all": "bun run build && bun run build:chrome && bun run build:firefox:extension && bun run build:electron",
     "test": "bun test",
     "type-check": "tsc --noEmit",
     "type-check:tests": "tsc --noEmit -p tsconfig.test.json"
@@ -60,12 +61,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/raw-data-interceptor.git"
+    "url": "https://github.com/nglmercer/raw-data-interceptor.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/raw-data-interceptor/issues"
+    "url": "https://github.com/nglmercer/raw-data-interceptor/issues"
   },
-  "homepage": "https://github.com/your-username/raw-data-interceptor#readme",
+  "homepage": "https://github.com/nglmercer/raw-data-interceptor#readme",
   "devDependencies": {
     "@types/bun": "latest",
     "@types/chrome": "^0.1.32",
