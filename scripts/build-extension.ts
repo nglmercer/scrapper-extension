@@ -57,14 +57,22 @@ fs.writeFileSync(
   JSON.stringify(manifest, null, 2)
 );
 
-// Copy static assets - assume running from project root
-const assets = [
-  { src: 'popup.html', dest: 'popup.html' },
-  { src: 'popup.js', dest: 'popup.js' },
-  { src: 'style.css', dest: 'style.css' }
+// Popup build
+await build({
+  entrypoints: [path.join('src/popup/index.ts')],
+  outdir: outDir,
+  target: 'browser', 
+  format: 'esm',
+  naming: 'popup.js' // Explicitly name it
+});
+
+// Copy popup assets
+const popupAssets = [
+  { src: 'src/popup/index.html', dest: 'popup.html' },
+  { src: 'src/popup/style.css', dest: 'style.css' }
 ];
 
-assets.forEach(asset => {
+popupAssets.forEach(asset => {
     if (fs.existsSync(asset.src)) {
         fs.copyFileSync(asset.src, path.join(outDir, asset.dest));
     } else {
