@@ -35,10 +35,11 @@
     "build:esm": "bun build src/index.ts --outdir dist --format esm --target browser --splitting",
     "build:cjs": "bun build src/index.ts --outdir dist --format cjs --target browser",
     "build:chrome": "bun build src/platforms/chrome/index.ts --outdir dist/platforms/chrome --format esm --target browser",
+    "build:chrome:extension": "bun run scripts/build-extension.ts chrome",
     "build:firefox": "bun build src/platforms/firefox/index.ts --outdir dist/platforms/firefox --format esm --target browser",
-    "build:firefox:extension": "bun build src/platforms/firefox/extension/background.ts --outdir dist/platforms/firefox --format esm --target browser && bun build src/platforms/firefox/extension/content.ts --outdir dist/platforms/firefox --format esm --target browser && bun build src/platforms/firefox/extension/injected.ts --outdir dist/platforms/firefox --format esm --target browser && bun -e \"import fs from 'fs'; fs.copyFileSync('src/platforms/firefox/extension/manifest.json', 'dist/platforms/firefox/manifest.json'); fs.copyFileSync('popup.html', 'dist/platforms/firefox/popup.html'); fs.copyFileSync('popup.js', 'dist/platforms/firefox/popup.js'); fs.copyFileSync('style.css', 'dist/platforms/firefox/style.css'); fs.cpSync('icons', 'dist/platforms/firefox/icons', {recursive: true});\"",
+    "build:firefox:extension": "bun run scripts/build-extension.ts firefox",
     "build:electron": "bun build src/platforms/electron/index.ts --outdir dist/platforms/electron --format cjs --target node",
-    "build:all": "bun run build && bun run build:chrome && bun run build:firefox:extension && bun run build:electron",
+    "build:all": "bun run build && bun run build:chrome && bun run build:chrome:extension && bun run build:firefox:extension && bun run build:electron",
     "test": "bun test",
     "type-check": "tsc --noEmit",
     "type-check:tests": "tsc --noEmit -p tsconfig.test.json"
