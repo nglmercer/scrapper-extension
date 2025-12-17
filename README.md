@@ -13,9 +13,22 @@ A powerful, cross-platform WebSocket data interceptor for Chrome, Firefox, and E
 
 ## 🚀 Quick Install
 
+> **Note:** This package is not yet published to NPM.
+
+### Build from Source
+
 ```bash
-npm install raw-data-interceptor
+# Install dependencies
+bun install
+
+# Build for Chrome
+bun run build:chrome:extension
+
+# Build for Firefox
+bun run build:firefox:extension
 ```
+
+Load the extension from the `dist/platforms` directory.
 
 ## 🤝 Contributing
 
