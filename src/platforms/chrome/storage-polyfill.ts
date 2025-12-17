@@ -9,7 +9,7 @@ import type { ChromeStorage, ChromeStorageArea, StorageChanges, StorageChange } 
  * Mock Chrome Storage Area implementation for testing and fallback
  */
 class MockStorageArea implements ChromeStorageArea {
-  private storage = new Map<string, any>();
+  private storage = new Map<string, unknown>();
   private listeners = new Set<(changes: StorageChanges, areaName: string) => void>();
   private areaName: string;
 
@@ -17,9 +17,9 @@ class MockStorageArea implements ChromeStorageArea {
     this.areaName = areaName;
   }
 
-  async get(keys?: string | string[] | Record<string, any> | null): Promise<Record<string, any>>;
-  get(keys: string | string[] | Record<string, any> | null, callback: (items: Record<string, any>) => void): void;
-  get(keys?: any, callback?: any): any {
+  async get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
+  get(keys: string | string[] | Record<string, unknown> | null, callback: (items: Record<string, unknown>) => void): void;
+  get(keys?: unknown, callback?: unknown): unknown {
     const execute = () => {
       if (!keys) {
         return Object.fromEntries(this.storage);
@@ -30,7 +30,7 @@ class MockStorageArea implements ChromeStorageArea {
       }
 
       if (Array.isArray(keys)) {
-        const result: Record<string, any> = {};
+        const result: Record<string, unknown> = {};
         keys.forEach(key => {
           result[key] = this.storage.get(key);
         });
@@ -38,9 +38,10 @@ class MockStorageArea implements ChromeStorageArea {
       }
 
       if (typeof keys === 'object') {
-        const result: Record<string, any> = {};
-        Object.keys(keys).forEach(key => {
-          result[key] = this.storage.get(key) ?? keys[key];
+        const result: Record<string, unknown> = {};
+        const k = keys as Record<string, unknown>;
+        Object.keys(k).forEach(key => {
+          result[key] = this.storage.get(key) ?? k[key];
         });
         return result;
       }
@@ -51,10 +52,10 @@ class MockStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         const result = execute();
-        callback(result);
+        (callback as (items: Record<string, unknown>) => void)(result);
       } catch (error) {
         console.error('Error in mock storage get:', error);
-        callback({});
+        (callback as (items: Record<string, unknown>) => void)({});
       }
       return;
     }
@@ -62,15 +63,16 @@ class MockStorageArea implements ChromeStorageArea {
     return Promise.resolve(execute());
   }
 
-  async set(items: Record<string, any>): Promise<void>;
-  set(items: Record<string, any>, callback: () => void): void;
-  set(items: any, callback?: any): any {
+  async set(items: Record<string, unknown>): Promise<void>;
+  set(items: Record<string, unknown>, callback: () => void): void;
+  set(items: unknown, callback?: unknown): unknown {
     const execute = () => {
       const changes: StorageChanges = {};
+      const it = items as Record<string, unknown>;
       
-      Object.keys(items).forEach(key => {
+      Object.keys(it).forEach(key => {
         const oldValue = this.storage.get(key);
-        const newValue = items[key];
+        const newValue = it[key];
         
         this.storage.set(key, newValue);
         
@@ -94,10 +96,10 @@ class MockStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error('Error in mock storage set:', error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -114,9 +116,9 @@ class MockStorageArea implements ChromeStorageArea {
 
   async remove(keys: string | string[]): Promise<void>;
   remove(keys: string | string[], callback: () => void): void;
-  remove(keys: any, callback?: any): any {
+  remove(keys: unknown, callback?: unknown): unknown {
     const execute = () => {
-      const keysArray = Array.isArray(keys) ? keys : [keys];
+      const keysArray = Array.isArray(keys) ? keys : [keys as string];
       const changes: StorageChanges = {};
 
       keysArray.forEach(key => {
@@ -142,10 +144,10 @@ class MockStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error('Error in mock storage remove:', error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -162,7 +164,7 @@ class MockStorageArea implements ChromeStorageArea {
 
   async clear(): Promise<void>;
   clear(callback: () => void): void;
-  clear(callback?: any): any {
+  clear(callback?: unknown): unknown {
     const execute = () => {
       const changes: StorageChanges = {};
       
@@ -187,10 +189,10 @@ class MockStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error('Error in mock storage clear:', error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }

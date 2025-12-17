@@ -14,7 +14,7 @@ import * as os from 'os';
  */
 class ElectronFileStorageArea implements ChromeStorageArea {
   private storagePath: string;
-  private data: Record<string, any> = {};
+  private data: Record<string, unknown> = {};
   private listeners = new Set<(changes: StorageChanges, areaName: string) => void>();
   private areaName: string;
   private initialized = false;
@@ -62,9 +62,9 @@ class ElectronFileStorageArea implements ChromeStorageArea {
     }
   }
 
-  async get(keys?: string | string[] | Record<string, any> | null): Promise<Record<string, any>>;
-  get(keys: string | string[] | Record<string, any> | null, callback: (items: Record<string, any>) => void): void;
-  get(keys?: any, callback?: any): any {
+  async get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
+  get(keys: string | string[] | Record<string, unknown> | null, callback: (items: Record<string, unknown>) => void): void;
+  get(keys?: unknown, callback?: unknown): unknown {
     const execute = () => {
       if (!this.initialized) {
         this.loadData();
@@ -79,17 +79,18 @@ class ElectronFileStorageArea implements ChromeStorageArea {
       }
 
       if (Array.isArray(keys)) {
-        const result: Record<string, any> = {};
+        const result: Record<string, unknown> = {};
         keys.forEach(key => {
           result[key] = this.data[key];
         });
         return result;
       }
 
-      if (typeof keys === 'object') {
-        const result: Record<string, any> = {};
-        Object.keys(keys).forEach(key => {
-          result[key] = this.data[key] ?? keys[key];
+      if (typeof keys === 'object' && keys !== null) {
+        const result: Record<string, unknown> = {};
+        const k = keys as Record<string, unknown>;
+        Object.keys(k).forEach(key => {
+          result[key] = this.data[key] ?? k[key];
         });
         return result;
       }
@@ -100,10 +101,10 @@ class ElectronFileStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         const result = execute();
-        callback(result);
+        (callback as (items: Record<string, unknown>) => void)(result);
       } catch (error) {
         console.error(`Error in Electron storage get for ${this.areaName}:`, error);
-        callback({});
+        (callback as (items: Record<string, unknown>) => void)({});
       }
       return;
     }
@@ -111,9 +112,9 @@ class ElectronFileStorageArea implements ChromeStorageArea {
     return Promise.resolve(execute());
   }
 
-  async set(items: Record<string, any>): Promise<void>;
-  set(items: Record<string, any>, callback: () => void): void;
-  set(items: any, callback?: any): any {
+  async set(items: Record<string, unknown>): Promise<void>;
+  set(items: Record<string, unknown>, callback: () => void): void;
+  set(items: unknown, callback?: unknown): unknown {
     const execute = () => {
       if (!this.initialized) {
         this.loadData();
@@ -121,9 +122,10 @@ class ElectronFileStorageArea implements ChromeStorageArea {
 
       const changes: StorageChanges = {};
       
-      Object.keys(items).forEach(key => {
+      const it = items as Record<string, unknown>;
+      Object.keys(it).forEach(key => {
         const oldValue = this.data[key];
-        const newValue = items[key];
+        const newValue = it[key];
         
         this.data[key] = newValue;
         
@@ -150,10 +152,10 @@ class ElectronFileStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error(`Error in Electron storage set for ${this.areaName}:`, error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -170,7 +172,7 @@ class ElectronFileStorageArea implements ChromeStorageArea {
 
   async remove(keys: string | string[]): Promise<void>;
   remove(keys: string | string[], callback: () => void): void;
-  remove(keys: any, callback?: any): any {
+  remove(keys: unknown, callback?: unknown): unknown {
     const execute = () => {
       if (!this.initialized) {
         this.loadData();
@@ -205,10 +207,10 @@ class ElectronFileStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error(`Error in Electron storage remove for ${this.areaName}:`, error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -225,7 +227,7 @@ class ElectronFileStorageArea implements ChromeStorageArea {
 
   async clear(): Promise<void>;
   clear(callback: () => void): void;
-  clear(callback?: any): any {
+  clear(callback?: unknown): unknown {
     const execute = () => {
       if (!this.initialized) {
         this.loadData();
@@ -257,10 +259,10 @@ class ElectronFileStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error(`Error in Electron storage clear for ${this.areaName}:`, error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -292,7 +294,7 @@ class ElectronFileStorageArea implements ChromeStorageArea {
  * Mock Electron Storage implementation for testing and fallback
  */
 class MockElectronStorageArea implements ChromeStorageArea {
-  private storage = new Map<string, any>();
+  private storage = new Map<string, unknown>();
   private listeners = new Set<(changes: StorageChanges, areaName: string) => void>();
   private areaName: string;
 
@@ -300,9 +302,9 @@ class MockElectronStorageArea implements ChromeStorageArea {
     this.areaName = areaName;
   }
 
-  async get(keys?: string | string[] | Record<string, any> | null): Promise<Record<string, any>>;
-  get(keys: string | string[] | Record<string, any> | null, callback: (items: Record<string, any>) => void): void;
-  get(keys?: any, callback?: any): any {
+  async get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
+  get(keys: string | string[] | Record<string, unknown> | null, callback: (items: Record<string, unknown>) => void): void;
+  get(keys?: unknown, callback?: unknown): unknown {
     const execute = () => {
       if (!keys) {
         return Object.fromEntries(this.storage);
@@ -313,17 +315,18 @@ class MockElectronStorageArea implements ChromeStorageArea {
       }
 
       if (Array.isArray(keys)) {
-        const result: Record<string, any> = {};
+        const result: Record<string, unknown> = {};
         keys.forEach(key => {
           result[key] = this.storage.get(key);
         });
         return result;
       }
 
-      if (typeof keys === 'object') {
-        const result: Record<string, any> = {};
-        Object.keys(keys).forEach(key => {
-          result[key] = this.storage.get(key) ?? keys[key];
+      if (typeof keys === 'object' && keys !== null) {
+        const result: Record<string, unknown> = {};
+        const k = keys as Record<string, unknown>;
+        Object.keys(k).forEach(key => {
+          result[key] = this.storage.get(key) ?? k[key];
         });
         return result;
       }
@@ -334,10 +337,10 @@ class MockElectronStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         const result = execute();
-        callback(result);
+        (callback as (items: Record<string, unknown>) => void)(result);
       } catch (error) {
         console.error('Error in mock Electron storage get:', error);
-        callback({});
+        (callback as (items: Record<string, unknown>) => void)({});
       }
       return;
     }
@@ -345,15 +348,16 @@ class MockElectronStorageArea implements ChromeStorageArea {
     return Promise.resolve(execute());
   }
 
-  async set(items: Record<string, any>): Promise<void>;
-  set(items: Record<string, any>, callback: () => void): void;
-  set(items: any, callback?: any): any {
+  async set(items: Record<string, unknown>): Promise<void>;
+  set(items: Record<string, unknown>, callback: () => void): void;
+  set(items: unknown, callback?: unknown): unknown {
     const execute = () => {
       const changes: StorageChanges = {};
       
-      Object.keys(items).forEach(key => {
+      const it = items as Record<string, unknown>;
+      Object.keys(it).forEach(key => {
         const oldValue = this.storage.get(key);
-        const newValue = items[key];
+        const newValue = it[key];
         
         this.storage.set(key, newValue);
         
@@ -377,10 +381,10 @@ class MockElectronStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error('Error in mock Electron storage set:', error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -397,7 +401,7 @@ class MockElectronStorageArea implements ChromeStorageArea {
 
   async remove(keys: string | string[]): Promise<void>;
   remove(keys: string | string[], callback: () => void): void;
-  remove(keys: any, callback?: any): any {
+  remove(keys: unknown, callback?: unknown): unknown {
     const execute = () => {
       const keysArray = Array.isArray(keys) ? keys : [keys];
       const changes: StorageChanges = {};
@@ -425,10 +429,10 @@ class MockElectronStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error('Error in mock Electron storage remove:', error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -445,7 +449,7 @@ class MockElectronStorageArea implements ChromeStorageArea {
 
   async clear(): Promise<void>;
   clear(callback: () => void): void;
-  clear(callback?: any): any {
+  clear(callback?: unknown): unknown {
     const execute = () => {
       const changes: StorageChanges = {};
       
@@ -470,10 +474,10 @@ class MockElectronStorageArea implements ChromeStorageArea {
     if (callback) {
       try {
         execute();
-        callback();
+        (callback as () => void)();
       } catch (error) {
         console.error('Error in mock Electron storage clear:', error);
-        callback();
+        (callback as () => void)();
       }
       return;
     }
@@ -540,18 +544,18 @@ export class ElectronStoragePolyfill implements ChromeStorage {
       addListener: (callback) => {
         listeners.add(callback);
         // Add to all storage areas
-        (this.local as any).addListener(callback);
-        if (this.sync) (this.sync as any).addListener(callback);
-        if (this.managed) (this.managed as any).addListener(callback);
-        if (this.session) (this.session as any).addListener(callback);
+        (this.local as ElectronFileStorageArea).addListener(callback);
+        if (this.sync) (this.sync as ElectronFileStorageArea).addListener(callback);
+        if (this.managed) (this.managed as ElectronFileStorageArea).addListener(callback);
+        if (this.session) (this.session as ElectronFileStorageArea).addListener(callback);
       },
       removeListener: (callback) => {
         listeners.delete(callback);
         // Remove from all storage areas
-        (this.local as any).removeListener(callback);
-        if (this.sync) (this.sync as any).removeListener(callback);
-        if (this.managed) (this.managed as any).removeListener(callback);
-        if (this.session) (this.session as any).removeListener(callback);
+        (this.local as ElectronFileStorageArea).removeListener(callback);
+        if (this.sync) (this.sync as ElectronFileStorageArea).removeListener(callback);
+        if (this.managed) (this.managed as ElectronFileStorageArea).removeListener(callback);
+        if (this.session) (this.session as ElectronFileStorageArea).removeListener(callback);
       },
       hasListener: (callback) => {
         return listeners.has(callback);

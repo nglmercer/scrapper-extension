@@ -6,25 +6,54 @@
 
 import type { ChromeRuntime } from '@/types/index.js';
 
+interface ElectronIpcMain {
+  handle(channel: string, listener: (event: unknown, ...args: unknown[]) => Promise<unknown> | unknown): void;
+}
+
+interface ElectronIpcRenderer {
+  invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+  on(channel: string, listener: (event: unknown, ...args: unknown[]) => void): void;
+  send(channel: string, ...args: unknown[]): void;
+  removeAllListeners(channel: string): void;
+}
+
+interface ElectronWebContents {
+  send(channel: string, ...args: unknown[]): Promise<void>;
+}
+
+interface ElectronWindow {
+  webContents: ElectronWebContents;
+}
+
+interface ElectronApp {
+  whenReady(): Promise<void>;
+}
+
+interface ElectronModule {
+  ipcMain?: ElectronIpcMain;
+  ipcRenderer?: ElectronIpcRenderer;
+  app?: ElectronApp;
+}
+
 /**
  * Electron Runtime implementation for main process
  */
 class ElectronMainRuntime implements ChromeRuntime {
   public lastError?: { message: string };
-  private ipcMain: any;
-  private mainWindow: any;
+  private ipcMain: ElectronIpcMain | null = null;
+  private mainWindow: ElectronWindow | null = null;
 
   constructor() {
     // Try to get Electron IPC
     const electron = this.getElectronModule();
-    this.ipcMain = electron?.ipcMain;
+    this.ipcMain = electron?.ipcMain || null;
     
     if (!this.ipcMain) {
       console.warn('IPC not available in Electron main process');
     }
   }
 
-  private getElectronModule(): any {
+  private getElectronModule(): ElectronModule | null {
     try {
       return require('electron');
     } catch (error) {
@@ -33,17 +62,17 @@ class ElectronMainRuntime implements ChromeRuntime {
     }
   }
 
-  setMainWindow(window: any): void {
+  setMainWindow(window: ElectronWindow): void {
     this.mainWindow = window;
   }
 
   get onMessage() {
     return {
-      addListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => {
+      addListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => {
         if (this.ipcMain) {
-          this.ipcMain.handle('raw-interceptor:message', async (event: any, message: any) => {
+          this.ipcMain.handle('raw-interceptor:message', async (event: unknown, message: unknown) => {
             return new Promise((resolve) => {
-              const result = callback(message, { id: 'electron-renderer' }, (response: any) => {
+              const result = callback(message, { id: 'electron-renderer' }, (response: unknown) => {
                 resolve(response);
               });
               
@@ -98,10 +127,10 @@ class ElectronMainRuntime implements ChromeRuntime {
     };
   }
 
-  async sendMessage(message: any): Promise<any>;
-  sendMessage(message: any, callback: (response: any) => void): void;
-  sendMessage(extensionId: string, message: any, callback: (response: any) => void): void;
-  sendMessage(messageOrExtensionId: any, messageOrCallback?: any, callback?: any): any {
+  async sendMessage(message: unknown): Promise<unknown>;
+  sendMessage(message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(extensionId: string, message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(messageOrExtensionId: unknown, messageOrCallback?: unknown, callback?: unknown): unknown {
     const isThreeParams = typeof messageOrExtensionId === 'string';
     const message = isThreeParams ? messageOrCallback : messageOrExtensionId;
     const cb = isThreeParams ? callback : messageOrCallback;
@@ -110,14 +139,14 @@ class ElectronMainRuntime implements ChromeRuntime {
       // Send to renderer process
       const execute = async () => {
         try {
-          const result = await this.mainWindow.webContents.send('raw-interceptor:message', message);
+          const result = await this.mainWindow?.webContents.send('raw-interceptor:message', message);
           return { type: 'success', result };
         } catch (error) {
           return { type: 'error', error: (error as Error).message };
         }
       };
 
-      if (cb) {
+      if (cb && cb instanceof Function) {
         execute()
           .then(response => cb(response))
           .catch(error => cb({ error: (error as Error).message }));
@@ -128,7 +157,7 @@ class ElectronMainRuntime implements ChromeRuntime {
     } else {
       // Fallback response
       const response = { type: 'success', message: 'Message received' };
-      if (cb) {
+      if (cb && cb instanceof Function) {
         cb(response);
       } else {
         return Promise.resolve(response);
@@ -190,19 +219,19 @@ class ElectronMainRuntime implements ChromeRuntime {
  */
 class ElectronRendererRuntime implements ChromeRuntime {
   public lastError?: { message: string };
-  private ipcRenderer: any;
+  private ipcRenderer: ElectronIpcRenderer | null = null;
 
   constructor() {
     // Try to get Electron IPC
     const electron = this.getElectronModule();
-    this.ipcRenderer = electron?.ipcRenderer;
+    this.ipcRenderer = electron?.ipcRenderer || null;
     
     if (!this.ipcRenderer) {
       console.warn('IPC not available in Electron renderer process');
     }
   }
 
-  private getElectronModule(): any {
+  private getElectronModule(): ElectronModule | null {
     try {
       return require('electron');
     } catch (error) {
@@ -269,10 +298,10 @@ class ElectronRendererRuntime implements ChromeRuntime {
     };
   }
 
-  async sendMessage(message: any): Promise<any>;
-  sendMessage(message: any, callback: (response: any) => void): void;
-  sendMessage(extensionId: string, message: any, callback: (response: any) => void): void;
-  sendMessage(messageOrExtensionId: any, messageOrCallback?: any, callback?: any): any {
+  async sendMessage(message: unknown): Promise<unknown>;
+  sendMessage(message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(extensionId: string, message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(messageOrExtensionId: unknown, messageOrCallback?: unknown, callback?: unknown): unknown {
     const isThreeParams = typeof messageOrExtensionId === 'string';
     const message = isThreeParams ? messageOrCallback : messageOrExtensionId;
     const cb = isThreeParams ? callback : messageOrCallback;
@@ -280,14 +309,14 @@ class ElectronRendererRuntime implements ChromeRuntime {
     if (this.ipcRenderer) {
       const execute = async () => {
         try {
-          const result = await this.ipcRenderer.invoke('raw-interceptor:message', message);
+          const result = await this.ipcRenderer?.invoke('raw-interceptor:message', message);
           return result;
         } catch (error) {
           return { type: 'error', error: (error as Error).message };
         }
       };
 
-      if (cb) {
+      if (cb && cb instanceof Function) {
         execute()
           .then(response => cb(response))
           .catch(error => cb({ error: (error as Error).message }));
@@ -298,7 +327,7 @@ class ElectronRendererRuntime implements ChromeRuntime {
     } else {
       // Fallback response
       const response = { type: 'success', message: 'Message received' };
-      if (cb) {
+      if (cb && cb instanceof Function) {
         cb(response);
       } else {
         return Promise.resolve(response);
@@ -322,7 +351,7 @@ class ElectronRendererRuntime implements ChromeRuntime {
     const connectionName = connectInfo?.name || `connection_${Date.now()}`;
     
     return {
-      postMessage: (message: any) => {
+      postMessage: (message: unknown) => {
         if (this.ipcRenderer) {
           this.ipcRenderer.send('raw-interceptor:port-message', { name: connectionName, message });
         }
@@ -331,14 +360,14 @@ class ElectronRendererRuntime implements ChromeRuntime {
         console.log(`Electron renderer connection ${connectionName} disconnected`);
       },
       onMessage: {
-        addListener: (callback: (message: any) => void) => {
+        addListener: (callback: (message: unknown) => void) => {
           if (this.ipcRenderer) {
-            this.ipcRenderer.on(`raw-interceptor:port-message:${connectionName}`, (event: any, message: any) => {
+            this.ipcRenderer.on(`raw-interceptor:port-message:${connectionName}`, (event: unknown, message: unknown) => {
               callback(message);
             });
           }
         },
-        removeListener: (callback: (message: any) => void) => {
+        removeListener: (callback: (message: unknown) => void) => {
           if (this.ipcRenderer) {
             this.ipcRenderer.removeAllListeners(`raw-interceptor:port-message:${connectionName}`);
           }
@@ -363,7 +392,7 @@ class ElectronRendererRuntime implements ChromeRuntime {
 class MockElectronRuntime implements ChromeRuntime {
   public lastError?: { message: string };
   
-  private messageListeners = new Set<(message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void>();
+  private messageListeners = new Set<(message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void>();
   private startupListeners = new Set<() => void>();
   private installedListeners = new Set<(details: {reason: string, previousVersion?: string}) => void>();
   public connections = new Map<string, MockElectronConnection>();
@@ -536,7 +565,7 @@ class MockElectronRuntime implements ChromeRuntime {
  * Mock connection for runtime.connect()
  */
 class MockElectronConnection {
-  private messageListeners = new Set<(message: any) => void>();
+  private messageListeners = new Set<(message: unknown) => void>();
   private disconnectListeners = new Set<() => void>();
   private isDisconnected = false;
 
@@ -545,7 +574,7 @@ class MockElectronConnection {
     private runtime: MockElectronRuntime
   ) {}
 
-  postMessage(message: any): void {
+  postMessage(message: unknown): void {
     if (this.isDisconnected) {
       console.warn('Cannot post message to disconnected connection');
       return;
@@ -585,10 +614,10 @@ class MockElectronConnection {
 
   get onMessage() {
     return {
-      addListener: (callback: (message: any) => void) => {
+      addListener: (callback: (message: unknown) => void) => {
         this.messageListeners.add(callback);
       },
-      removeListener: (callback: (message: any) => void) => {
+      removeListener: (callback: (message: unknown) => void) => {
         this.messageListeners.delete(callback);
       }
     };
@@ -662,25 +691,25 @@ export class ElectronRuntimePolyfill implements ChromeRuntime {
     }
   }
 
-  async sendMessage(message: any): Promise<any>;
-  sendMessage(message: any, callback: (response: any) => void): void;
-  sendMessage(extensionId: string, message: any, callback: (response: any) => void): void;
-  sendMessage(messageOrExtensionId: any, messageOrCallback?: any, callback?: any): any {
+  async sendMessage(message: unknown): Promise<unknown>;
+  sendMessage(message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(extensionId: string, message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(messageOrExtensionId: string, messageOrCallback?: unknown, callback?: (response: unknown) => void): unknown {
     if (this.mainRuntime) {
-      return this.mainRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback);
+      return this.mainRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback!);
     } else if (this.rendererRuntime) {
-      return this.rendererRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback);
+      return this.rendererRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback!);
     } else {
-      return this.mockRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback);
+      return this.mockRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback!);
     }
   }
 
   connect(connectInfo?: {name?: string}): {
-    postMessage(message: any): void;
+    postMessage(message: unknown): void;
     disconnect(): void;
     onMessage: {
-      addListener(callback: (message: any) => void): void;
-      removeListener(callback: (message: any) => void): void;
+      addListener(callback: (message: unknown) => void): void;
+      removeListener(callback: (message: unknown) => void): void;
     };
     onDisconnect: {
       addListener(callback: () => void): void;
@@ -699,9 +728,9 @@ export class ElectronRuntimePolyfill implements ChromeRuntime {
   /**
    * Set main window (for main process)
    */
-  setMainWindow(window: any): void {
+  setMainWindow(window: unknown): void {
     if (this.mainRuntime) {
-      this.mainRuntime.setMainWindow(window);
+      this.mainRuntime.setMainWindow(window as ElectronWindow);
     }
   }
 

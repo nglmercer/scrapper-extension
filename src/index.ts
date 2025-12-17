@@ -30,20 +30,25 @@ export class RAWInterceptor {
   private interceptor: WebSocketInterceptor;
   private config: InterceptorConfig;
 
-  constructor() {
-    this.storage = new CrossPlatformStorage('local');
-    this.interceptor = new WebSocketInterceptor();
+  private configListenerCleanup: (() => void) | null = null;
+
+  constructor(
+    storage?: CrossPlatformStorage,
+    interceptor?: WebSocketInterceptor
+  ) {
+    this.storage = storage || new CrossPlatformStorage('local');
+    this.interceptor = interceptor || new WebSocketInterceptor();
     this.config = {
       masterSwitch: true,
       debugMode: false,
       WebhookUrl: '',
       WebhookOption: false,
-      WindowUrl: 'https://nglmercer.github.io/multistreamASTRO/chat',
+      WindowUrl: '',
       OpenWindow: false,
       eventBufferSize: 1000,
       websockets: {
         enabled: true,
-        urlFilters: ['webcast', 'tikfinity.zerody.one', 'irc-ws.chat.twitch.tv'],
+        urlFilters: ['webcast'],
         minSize: 10,
         maxSize: 10000,
         excludeStrings: ['hi', 'pong', 'ping']
@@ -52,11 +57,20 @@ export class RAWInterceptor {
   }
 
   /**
+   * Safe logger that respects debug mode
+   */
+  private log(message: string, ...args: unknown[]): void {
+    if (this.isDebugMode()) {
+      console.log(`[RAW Interceptor] ${message}`, ...args);
+    }
+  }
+
+  /**
    * Initialize the interceptor with configuration
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.log('RAW Interceptor already initialized');
+      this.log('Already initialized');
       return;
     }
 
@@ -85,9 +99,9 @@ export class RAWInterceptor {
       this.setupConfigListener();
 
       this.isInitialized = true;
-      console.log('RAW Interceptor initialized successfully');
+      this.log('Initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize RAW Interceptor:', error);
+      console.error('[RAW Interceptor] Failed to initialize:', error);
       throw error;
     }
   }
@@ -101,11 +115,16 @@ export class RAWInterceptor {
     }
 
     try {
+      if (this.configListenerCleanup) {
+        this.configListenerCleanup();
+        this.configListenerCleanup = null;
+      }
+
       await this.interceptor.destroy();
       this.isInitialized = false;
-      console.log('RAW Interceptor destroyed');
+      this.log('Destroyed');
     } catch (error) {
-      console.error('Error destroying RAW Interceptor:', error);
+      console.error('[RAW Interceptor] Error destroying:', error);
       throw error;
     }
   }
@@ -143,9 +162,9 @@ export class RAWInterceptor {
         this.interceptor.toggleMasterSwitch();
       }
       
-      console.log('Configuration updated');
+      this.log('Configuration updated');
     } catch (error) {
-      console.error('Error updating configuration:', error);
+      console.error('[RAW Interceptor] Error updating configuration:', error);
       throw error;
     }
   }
@@ -158,9 +177,9 @@ export class RAWInterceptor {
       await this.storage.resetConfig();
       const defaultConfig = await this.storage.loadConfig();
       await this.updateConfig(defaultConfig);
-      console.log('Configuration reset to defaults');
+      this.log('Configuration reset to defaults');
     } catch (error) {
-      console.error('Error resetting configuration:', error);
+      console.error('[RAW Interceptor] Error resetting configuration:', error);
       throw error;
     }
   }
@@ -222,35 +241,39 @@ export class RAWInterceptor {
    * Set up configuration change listener
    */
   private setupConfigListener(): void {
-    this.storage.onChanged((changes: StorageChanges) => {
+    this.configListenerCleanup = this.storage.onChanged((changes: StorageChanges) => {
       // Handle configuration changes
-      if (changes.masterSwitch || changes.debugMode || changes.websockets) {
-        
-        // Reload config from storage
-        this.storage.loadConfig().then((config: InterceptorConfig) => {
-          this.config = config;
+      try {
+        if (changes.masterSwitch || changes.debugMode || changes.websockets) {
           
-          // Update interceptor
-          if (changes.websockets) {
-            this.interceptor.updateConfig(config.websockets);
-          }
-          
-          if (changes.debugMode) {
-            const debugMode = changes.debugMode.newValue ?? false;
-            if (debugMode !== this.interceptor.isDebugMode()) {
-              this.interceptor.toggleDebugMode();
+          // Reload config from storage
+          this.storage.loadConfig().then((config: InterceptorConfig) => {
+            this.config = config;
+            
+            // Update interceptor
+            if (changes.websockets) {
+              this.interceptor.updateConfig(config.websockets);
             }
-          }
-          
-          if (changes.masterSwitch) {
-            const masterSwitch = changes.masterSwitch.newValue ?? true;
-            if (masterSwitch !== this.interceptor.isEnabled()) {
-              this.interceptor.toggleMasterSwitch();
+            
+            if (changes.debugMode) {
+              const debugMode = changes.debugMode.newValue ?? false;
+              if (debugMode !== this.interceptor.isDebugMode()) {
+                this.interceptor.toggleDebugMode();
+              }
             }
-          }
-        }).catch((error: any) => {
-          console.error('Error handling configuration change:', error);
-        });
+            
+            if (changes.masterSwitch) {
+              const masterSwitch = changes.masterSwitch.newValue ?? true;
+              if (masterSwitch !== this.interceptor.isEnabled()) {
+                this.interceptor.toggleMasterSwitch();
+              }
+            }
+          }).catch((error: unknown) => {
+            console.error('Error handling configuration change:', error);
+          });
+        }
+      } catch (error) {
+        console.error('Error in configuration change listener:', error);
       }
     });
   }

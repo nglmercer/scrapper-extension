@@ -11,20 +11,20 @@ import type { ChromeRuntime } from '@/types/index.js';
 class MockRuntime implements ChromeRuntime {
   public lastError?: { message: string };
   
-  private messageListeners = new Set<(message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void>();
+  private messageListeners = new Set<(message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void>();
   private startupListeners = new Set<() => void>();
   private installedListeners = new Set<(details: {reason: string, previousVersion?: string}) => void>();
   public connections = new Map<string, MockConnection>();
 
   get onMessage() {
     return {
-      addListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => {
+      addListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => {
         this.messageListeners.add(callback);
       },
-      removeListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => {
+      removeListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => {
         this.messageListeners.delete(callback);
       },
-      hasListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => {
+      hasListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => {
         return this.messageListeners.has(callback);
       }
     };
@@ -52,23 +52,24 @@ class MockRuntime implements ChromeRuntime {
     };
   }
 
-  async sendMessage(message: any): Promise<any>;
-  sendMessage(message: any, callback: (response: any) => void): void;
-  sendMessage(extensionId: string, message: any, callback: (response: any) => void): void;
-  sendMessage(messageOrExtensionId: any, messageOrCallback?: any, callback?: any): any {
+  async sendMessage(message: unknown): Promise<unknown>;
+  sendMessage(message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(extensionId: string, message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(messageOrExtensionId: unknown, messageOrCallback?: unknown, callback?: unknown): unknown {
     const isThreeParams = typeof messageOrExtensionId === 'string';
     const message = isThreeParams ? messageOrCallback : messageOrExtensionId;
-    const cb = isThreeParams ? callback : messageOrCallback;
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    const cb = (isThreeParams ? callback : messageOrCallback) as Function | undefined;
 
     const execute = async () => {
       // Simulate message handling
-      let response: any = undefined;
+      let response: unknown = undefined;
       let wasHandled = false;
 
       // Try to handle with listeners
       for (const listener of this.messageListeners) {
         try {
-          const result = listener(message, { id: 'mock-sender' }, (resp: any) => {
+          const result = listener(message, { id: 'mock-sender' }, (resp: unknown) => {
             response = resp;
             wasHandled = true;
           });
@@ -92,7 +93,7 @@ class MockRuntime implements ChromeRuntime {
     if (cb) {
       execute()
         .then(response => cb(response))
-        .catch(error => cb({ error: error.message }));
+        .catch((error: unknown) => cb({ error: error instanceof Error ? error.message : 'Unknown error' }));
       return;
     }
 
@@ -100,11 +101,11 @@ class MockRuntime implements ChromeRuntime {
   }
 
   connect(connectInfo?: {name?: string}): {
-    postMessage(message: any): void;
+    postMessage(message: unknown): void;
     disconnect(): void;
     onMessage: {
-      addListener(callback: (message: any) => void): void;
-      removeListener(callback: (message: any) => void): void;
+      addListener(callback: (message: unknown) => void): void;
+      removeListener(callback: (message: unknown) => void): void;
     };
     onDisconnect: {
       addListener(callback: () => void): void;
@@ -152,14 +153,14 @@ class MockRuntime implements ChromeRuntime {
   /**
    * Simulate receiving a message (for testing)
    */
-  simulateMessage(message: any, sender?: any): Promise<any> {
+  simulateMessage(message: unknown, sender?: unknown): Promise<unknown> {
     return new Promise((resolve) => {
-      let response: any = undefined;
+      let response: unknown = undefined;
       let wasHandled = false;
 
       for (const listener of this.messageListeners) {
         try {
-          const result = listener(message, sender || { id: 'mock-sender' }, (resp: any) => {
+          const result = listener(message, sender || { id: 'mock-sender' }, (resp: unknown) => {
             response = resp;
             wasHandled = true;
             resolve(resp);
@@ -184,7 +185,7 @@ class MockRuntime implements ChromeRuntime {
  * Mock connection for runtime.connect()
  */
 class MockConnection {
-  private messageListeners = new Set<(message: any) => void>();
+  private messageListeners = new Set<(message: unknown) => void>();
   private disconnectListeners = new Set<() => void>();
   private isDisconnected = false;
 
@@ -233,10 +234,10 @@ class MockConnection {
 
   get onMessage() {
     return {
-      addListener: (callback: (message: any) => void) => {
+      addListener: (callback: (message: unknown) => void) => {
         this.messageListeners.add(callback);
       },
-      removeListener: (callback: (message: any) => void) => {
+      removeListener: (callback: (message: unknown) => void) => {
         this.messageListeners.delete(callback);
       }
     };
@@ -261,9 +262,9 @@ export class ChromeRuntimePolyfill implements ChromeRuntime {
   public lastError?: { message: string };
   
   public onMessage: {
-    addListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => void;
-    removeListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => void;
-    hasListener: (callback: (message: any, sender: any, sendResponse: (response?: any) => void) => boolean | void) => boolean;
+    addListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => void;
+    removeListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => void;
+    hasListener: (callback: (message: unknown, sender: unknown, sendResponse: (response?: unknown) => void) => boolean | void) => boolean;
   };
   
   public onStartup: {
@@ -297,29 +298,29 @@ export class ChromeRuntimePolyfill implements ChromeRuntime {
     }
   }
 
-  async sendMessage(message: any): Promise<any>;
-  sendMessage(message: any, callback: (response: any) => void): void;
-  sendMessage(extensionId: string, message: any, callback: (response: any) => void): void;
-  sendMessage(messageOrExtensionId: any, messageOrCallback?: any, callback?: any): any {
+  async sendMessage(message: unknown): Promise<unknown>;
+  sendMessage(message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(extensionId: string, message: unknown, callback: (response: unknown) => void): void;
+  sendMessage(messageOrExtensionId: string, messageOrCallback?: unknown, callback?: (response: unknown) => void): unknown {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
       // Use real Chrome API
       if (typeof messageOrExtensionId === 'string') {
-        return chrome.runtime.sendMessage(messageOrExtensionId, messageOrCallback, callback);
+        return chrome.runtime.sendMessage(messageOrExtensionId, messageOrCallback, callback as (response: unknown) => void);
       } else {
         return chrome.runtime.sendMessage(messageOrExtensionId, messageOrCallback);
       }
     } else {
       // Fallback to mock implementation
-      return this.mockRuntime.sendMessage(messageOrExtensionId, messageOrCallback, callback);
+      return this.mockRuntime.sendMessage(messageOrExtensionId as string, messageOrCallback, callback as (response: unknown) => void);
     }
   }
 
   connect(connectInfo?: {name?: string}): {
-    postMessage(message: any): void;
+    postMessage(message: unknown): void;
     disconnect(): void;
     onMessage: {
-      addListener(callback: (message: any) => void): void;
-      removeListener(callback: (message: any) => void): void;
+      addListener(callback: (message: unknown) => void): void;
+      removeListener(callback: (message: unknown) => void): void;
     };
     onDisconnect: {
       addListener(callback: () => void): void;

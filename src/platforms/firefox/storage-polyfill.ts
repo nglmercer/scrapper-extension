@@ -21,7 +21,8 @@ class FirefoxStorageArea implements ChromeStorageArea {
 
   async get(keys?: string | string[] | Record<string, any> | null): Promise<Record<string, any>>;
   get(keys: string | string[] | Record<string, any> | null, callback: (items: Record<string, any>) => void): void;
-  get(keys?: any, callback?: any): any {
+  get(keys?: string | string[] | Record<string, unknown> | null, callback?: (items: Record<string, unknown>) => void): Promise<Record<string, unknown>> | void;
+  get(keys?: unknown, callback?: unknown): unknown {
     const execute = async () => {
       try {
         if (!keys) {
@@ -50,7 +51,7 @@ class FirefoxStorageArea implements ChromeStorageArea {
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       execute()
         .then(result => callback(result))
         .catch(() => callback({}));
@@ -62,17 +63,18 @@ class FirefoxStorageArea implements ChromeStorageArea {
 
   async set(items: Record<string, any>): Promise<void>;
   set(items: Record<string, any>, callback: () => void): void;
-  set(items: any, callback?: any): any {
+  set(items: Record<string, unknown>, callback?: () => void): Promise<void> | void;
+  set(items: unknown, callback?: unknown): unknown {
     const execute = async () => {
       try {
-        await this.storageArea.set(items);
+        await this.storageArea.set(items as Record<string, unknown>);
       } catch (error) {
         console.error(`Error in Firefox storage set for ${this.areaName}:`, error);
         throw error;
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       execute()
         .then(() => callback())
         .catch(() => callback());
@@ -84,17 +86,18 @@ class FirefoxStorageArea implements ChromeStorageArea {
 
   async remove(keys: string | string[]): Promise<void>;
   remove(keys: string | string[], callback: () => void): void;
-  remove(keys: any, callback?: any): any {
+  remove(keys: string | string[], callback?: () => void): Promise<void> | void;
+  remove(keys: unknown, callback?: unknown): unknown {
     const execute = async () => {
       try {
-        await this.storageArea.remove(keys);
+        await this.storageArea.remove(keys as string | string[]);
       } catch (error) {
         console.error(`Error in Firefox storage remove for ${this.areaName}:`, error);
         throw error;
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       execute()
         .then(() => callback())
         .catch(() => callback());
@@ -106,7 +109,8 @@ class FirefoxStorageArea implements ChromeStorageArea {
 
   async clear(): Promise<void>;
   clear(callback: () => void): void;
-  clear(callback?: any): any {
+  clear(callback?: () => void): Promise<void> | void;
+  clear(callback?: unknown): unknown {
     const execute = async () => {
       try {
         await this.storageArea.clear();
@@ -116,7 +120,7 @@ class FirefoxStorageArea implements ChromeStorageArea {
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       execute()
         .then(() => callback())
         .catch(() => callback());
@@ -163,7 +167,7 @@ class FirefoxStorageArea implements ChromeStorageArea {
  * Mock Firefox Storage implementation for testing and fallback
  */
 class MockFirefoxStorageArea implements ChromeStorageArea {
-  private storage = new Map<string, any>();
+  private storage = new Map<string, unknown>();
   private listeners = new Set<(changes: StorageChanges, areaName: string) => void>();
   private areaName: string;
 
@@ -173,7 +177,8 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
 
   async get(keys?: string | string[] | Record<string, any> | null): Promise<Record<string, any>>;
   get(keys: string | string[] | Record<string, any> | null, callback: (items: Record<string, any>) => void): void;
-  get(keys?: any, callback?: any): any {
+  get(keys?: string | string[] | Record<string, unknown> | null, callback?: (items: Record<string, unknown>) => void): Promise<Record<string, unknown>> | void;
+  get(keys?: unknown, callback?: unknown): unknown {
     const execute = () => {
       if (!keys) {
         return Object.fromEntries(this.storage);
@@ -193,8 +198,8 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
 
       if (typeof keys === 'object') {
         const result: Record<string, any> = {};
-        Object.keys(keys).forEach(key => {
-          result[key] = this.storage.get(key) ?? keys[key];
+        Object.keys(keys as Record<string, unknown>).forEach(key => {
+          result[key] = this.storage.get(key) ?? (keys as Record<string, unknown>)[key];
         });
         return result;
       }
@@ -202,7 +207,7 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
       return {};
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       try {
         const result = execute();
         callback(result);
@@ -218,13 +223,14 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
 
   async set(items: Record<string, any>): Promise<void>;
   set(items: Record<string, any>, callback: () => void): void;
-  set(items: any, callback?: any): any {
+  set(items: Record<string, unknown>, callback?: () => void): Promise<void> | void;
+  set(items: unknown, callback?: unknown): unknown {
     const execute = () => {
       const changes: StorageChanges = {};
       
-      Object.keys(items).forEach(key => {
+      Object.keys(items as Record<string, unknown>).forEach(key => {
         const oldValue = this.storage.get(key);
-        const newValue = items[key];
+        const newValue = (items as Record<string, unknown>)[key];
         
         this.storage.set(key, newValue);
         
@@ -245,7 +251,7 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       try {
         execute();
         callback();
@@ -268,7 +274,8 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
 
   async remove(keys: string | string[]): Promise<void>;
   remove(keys: string | string[], callback: () => void): void;
-  remove(keys: any, callback?: any): any {
+  remove(keys: string | string[], callback?: () => void): Promise<void> | void;
+  remove(keys: unknown, callback?: unknown): unknown {
     const execute = () => {
       const keysArray = Array.isArray(keys) ? keys : [keys];
       const changes: StorageChanges = {};
@@ -293,7 +300,7 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       try {
         execute();
         callback();
@@ -316,7 +323,8 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
 
   async clear(): Promise<void>;
   clear(callback: () => void): void;
-  clear(callback?: any): any {
+  clear(callback?: () => void): Promise<void> | void;
+  clear(callback?: unknown): unknown {
     const execute = () => {
       const changes: StorageChanges = {};
       
@@ -338,7 +346,7 @@ class MockFirefoxStorageArea implements ChromeStorageArea {
       }
     };
 
-    if (callback) {
+    if (callback && callback instanceof Function) {
       try {
         execute();
         callback();
