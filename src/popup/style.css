@@ -43,7 +43,7 @@ body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background-color: var(--background);
     color: var(--text-main);
-    width: 380px;
+    width: auto;
     font-size: 14px;
     line-height: 1.5;
 }
@@ -328,6 +328,7 @@ input:checked + .slider:before {
     display: flex;
     gap: 0.5rem;
     margin-top: 1rem;
+    max-width: min(380px, min-content);
 }
 
 .btn {
@@ -388,10 +389,6 @@ input:checked + .slider:before {
     overflow: hidden;
     padding-top: 0;
     padding-bottom: 0;
-}
-
-.item-label .switch:checked ~ .collapsible {
-    /* Logic handled by JS to toggle a class instead */
 }
 
 /* Visibility classes used by JS */
@@ -459,9 +456,15 @@ input:checked + .slider:before {
     padding: 2px 8px;
     font-size: 12px;
     font-family: monospace;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
+    max-width: 100%;
+}
+
+.tag span {
+    word-break: break-all;
+    min-width: 0;
 }
 
 .tag .remove-tag {
@@ -474,6 +477,7 @@ input:checked + .slider:before {
     width: 14px;
     height: 14px;
     border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .tag .remove-tag:hover {
