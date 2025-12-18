@@ -14,9 +14,17 @@ export const DEFAULT_CONFIG: InterceptorConfig = {
   debugMode: false,
   WebhookUrl: '',
   WebhookOption: false,
-  WindowUrl: 'https://nglmercer.github.io/multistreamASTRO/chat',
+  WindowUrl: '/',
   OpenWindow: false,
   eventBufferSize: 1000,
+  nativeMessaging: {
+    enabled: false,
+    appName: 'com.scrapper.extension.host'
+  },
+  socketStream: {
+    enabled: false,
+    url: 'ws://localhost:3000'
+  },
   websockets: {
     enabled: true,
     urlFilters: ['webcast', 'tikfinity.zerody.one', 'irc-ws.chat.twitch.tv'],
@@ -157,7 +165,10 @@ export class CrossPlatformStorage implements PlatformStorage {
         'WebhookOption',
         'WindowUrl',
         'OpenWindow',
+        'OpenWindow',
         'eventBufferSize',
+        'nativeMessaging',
+        'socketStream',
         'websockets'
       ]);
 

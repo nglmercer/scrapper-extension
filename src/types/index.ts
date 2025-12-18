@@ -32,6 +32,15 @@ export interface InterceptorConfig {
   WindowUrl: string;
   OpenWindow: boolean;
   eventBufferSize: number;
+  // Export methods
+  nativeMessaging: {
+    enabled: boolean;
+    appName: string;
+  };
+  socketStream: {
+    enabled: boolean;
+    url: string;
+  };
   websockets: WebSocketConfig;
 }
 

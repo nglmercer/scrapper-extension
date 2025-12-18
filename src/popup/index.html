@@ -99,7 +99,44 @@
                     <div class="card-content collapsible" id="OpenWindow_container">
                         <div class="input-group">
                             <label for="WindowUrl">Window URL</label>
-                            <input type="text" id="WindowUrl" placeholder="https://..." value="https://nglmercer.github.io/multistreamASTRO/">
+                            <input type="text" id="WindowUrl" placeholder="https://..." value="/">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>Native Messaging</h3>
+                            <p>Send data to local application</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="nativeEnabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-content collapsible" id="native_container">
+                        <div class="input-group">
+                            <label for="nativeAppName">App Name (com.company.app)</label>
+                            <input type="text" id="nativeAppName" placeholder="com.scrapper.host">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>WebSocket Stream</h3>
+                            <p>Stream data to a WS Server</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="socketEnabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-content collapsible" id="socket_container">
+                        <div class="input-group">
+                            <label for="socketUrl">WS Server URL</label>
+                            <input type="text" id="socketUrl" placeholder="ws://localhost:3000">
                         </div>
                     </div>
                 </div>

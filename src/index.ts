@@ -56,6 +56,14 @@ class RAWInterceptor {
       WindowUrl: '',
       OpenWindow: false,
       eventBufferSize: 1000,
+      nativeMessaging: {
+        enabled: false,
+        appName: 'com.scrapper.extension.host'
+      },
+      socketStream: {
+        enabled: false,
+        url: 'ws://localhost:3000'
+      },
       websockets: {
         enabled: true,
         urlFilters: ['webcast'],
@@ -105,6 +113,10 @@ class RAWInterceptor {
       if (this.config.masterSwitch !== this.interceptor.isEnabled()) {
         this.interceptor.toggleMasterSwitch();
       }
+
+      // Initialize exports
+      this.initNativeMessaging();
+      this.initSocketStream();
 
       // Initialize the interceptor
       await this.interceptor.initialize();
@@ -191,6 +203,22 @@ class RAWInterceptor {
         this.interceptor.toggleMasterSwitch();
       }
       
+      // Update Native Messaging
+      if (newConfig.nativeMessaging) {
+          if (newConfig.nativeMessaging.enabled && !this.nativePort) {
+              this.initNativeMessaging();
+          } else if (!newConfig.nativeMessaging.enabled && this.nativePort) {
+              this.nativePort.disconnect();
+              this.nativePort = null;
+          }
+      }
+
+      // Update Socket Stream
+      if (newConfig.socketStream) {
+          // Re-init handles enabled check
+          this.initSocketStream();
+      }
+
       this.log('Configuration updated');
     } catch (error) {
       logger.error('Error updating configuration', 'RAWInterceptor', error);
@@ -311,11 +339,115 @@ class RAWInterceptor {
     });
   }
 
+
+  // Native Messaging State
+  private nativePort: any | null = null;
+  
+  // WebSocket Stream State
+  private streamSocket: WebSocket | null = null;
+  private streamReconnectTimer: any | null = null;
+
+  /**
+   * Initialize Native Messaging
+   */
+  private initNativeMessaging() {
+    if (!this.config.nativeMessaging?.enabled || typeof chrome === 'undefined' || !chrome.runtime?.connectNative) {
+      return;
+    }
+
+    try {
+      const appName = this.config.nativeMessaging.appName;
+      this.log(`Connecting to native app: ${appName}`);
+      this.nativePort = chrome.runtime.connectNative(appName);
+      
+      this.nativePort.onDisconnect.addListener(() => {
+         this.log('Native messaging disconnected');
+         this.nativePort = null;
+         // Optional: retry logic if needed, but usually onDisconnect means app closed or not found
+         if (chrome.runtime.lastError) {
+             logger.error('Native messaging error', 'RAWInterceptor', chrome.runtime.lastError);
+         }
+      });
+      
+      this.nativePort.onMessage.addListener((msg: any) => {
+          this.log('Received native message:', msg);
+          // Handle response if any logic requires it
+      });
+      
+    } catch (e) {
+      logger.error('Failed to init native messaging', 'RAWInterceptor', e);
+    }
+  }
+
+  /**
+   * Initialize WebSocket Stream
+   */
+  private initSocketStream() {
+      if (!this.config.socketStream?.enabled) {
+          if (this.streamSocket) {
+              this.streamSocket.close();
+              this.streamSocket = null;
+          }
+          return;
+      }
+
+      const url = this.config.socketStream.url;
+      if (!url) return;
+
+      if (this.streamSocket && (this.streamSocket.readyState === WebSocket.OPEN || this.streamSocket.readyState === WebSocket.CONNECTING)) {
+          return; // Already connecting or connected
+      }
+
+      try {
+          this.log(`Connecting to stream socket: ${url}`);
+          this.streamSocket = new WebSocket(url);
+          
+          this.streamSocket.onopen = () => {
+              this.log('Stream socket connected');
+              // Clear reconnect timer if successful
+              if (this.streamReconnectTimer) {
+                  clearTimeout(this.streamReconnectTimer);
+                  this.streamReconnectTimer = null;
+              }
+          };
+          
+          this.streamSocket.onclose = () => {
+              this.log('Stream socket closed');
+              this.streamSocket = null;
+              // Reconnect logic
+              this.scheduleStreamReconnect();
+          };
+          
+          this.streamSocket.onerror = (err) => {
+              logger.error('Stream socket error', 'RAWInterceptor', err);
+          };
+
+      } catch (e) {
+          logger.error('Failed to init stream socket', 'RAWInterceptor', e);
+          this.scheduleStreamReconnect();
+      }
+  }
+
+  private scheduleStreamReconnect() {
+      if (this.streamReconnectTimer) return;
+      if (!this.config.socketStream?.enabled) return;
+
+      this.log('Scheduling stream reconnect in 5s...');
+      this.streamReconnectTimer = setTimeout(() => {
+          this.streamReconnectTimer = null;
+          this.initSocketStream();
+      }, 5000);
+  }
+
   /**
    * Process an intercepted event: Send webhook and/or handle new window
    */
   async processEvent(message: any): Promise<void> {
-      const { WebhookUrl, WebhookOption, OpenWindow, WindowUrl } = this.config;
+      const { 
+          WebhookUrl, WebhookOption, 
+          OpenWindow, WindowUrl,
+          nativeMessaging, socketStream
+      } = this.config;
       
       const now = new Date().toLocaleString();
       const payloadWithTime = {
@@ -323,12 +455,39 @@ class RAWInterceptor {
           time: now
       };
       
+      // 1. Webhook
       if (WebhookOption && WebhookUrl) {
+          // Don't await webhooks to prevent blocking other outputs? 
+          // Previous logic awaited it. Let's keep it async but maybe not await if performance matters.
+          // For now, keep await to maintain order/logic flow.
           await this.sendWebhook(WebhookUrl, payloadWithTime);
       }
       
+      // 2. Window PostMessage
       if (OpenWindow && WindowUrl) {
           await this.handleNewWindow(message);
+      }
+
+      // 3. Native Messaging
+      if (nativeMessaging?.enabled && this.nativePort) {
+          try {
+              this.nativePort.postMessage(payloadWithTime);
+          } catch (e) {
+              // Port might be disconnected unexpectedly
+              logger.error('Error sending native message', 'RAWInterceptor', e);
+              this.nativePort = null;
+              // Try to reconnect?
+              this.initNativeMessaging();
+          }
+      }
+
+      // 4. WebSocket Stream
+      if (socketStream?.enabled && this.streamSocket?.readyState === WebSocket.OPEN) {
+          try {
+              this.streamSocket.send(JSON.stringify(payloadWithTime));
+          } catch (e) {
+              logger.error('Error sending to stream socket', 'RAWInterceptor', e);
+          }
       }
   }
 

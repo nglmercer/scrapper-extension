@@ -13,6 +13,15 @@ interface ExtensionConfig {
     WebhookOption: boolean;
     WindowUrl: string;
     OpenWindow: boolean;
+    // New fields
+    nativeMessaging: {
+      enabled: boolean;
+      appName: string;
+    };
+    socketStream: {
+      enabled: boolean;
+      url: string;
+    };
     debugMode: boolean;
     eventBufferSize: number;
     masterSwitch: boolean;
@@ -23,10 +32,18 @@ interface ExtensionConfig {
 const defaultConfig: ExtensionConfig = {
     WebhookUrl: "",
     WebhookOption: false,
-    WindowUrl: "https://nglmercer.github.io/multistreamASTRO/",
+    WindowUrl: "/",
     OpenWindow: false,
     debugMode: false,
     eventBufferSize: 1000,
+    nativeMessaging: {
+      enabled: false,
+      appName: 'com.scrapper.extension.host'
+    },
+    socketStream: {
+      enabled: false,
+      url: 'ws://localhost:3000'
+    },
     masterSwitch: true,
     websockets: {
         enabled: true,
@@ -163,6 +180,12 @@ interface UIElements {
     WebhookUrl: HTMLInputElement;
     OpenWindow: HTMLInputElement;
     WindowUrl: HTMLInputElement;
+    // New UI Elements
+    nativeEnabled: HTMLInputElement;
+    nativeAppName: HTMLInputElement;
+    socketEnabled: HTMLInputElement;
+    socketUrl: HTMLInputElement;
+    
     debugMode: HTMLInputElement;
     eventBufferSize: HTMLInputElement;
     wsEnabled: HTMLInputElement;
@@ -181,6 +204,8 @@ interface UIElements {
     // Containers
     WebhookOption_container: HTMLElement;
     OpenWindow_container: HTMLElement;
+    native_container: HTMLElement;
+    socket_container: HTMLElement;
     
     // Header
     popOutBtn: HTMLButtonElement;
@@ -201,6 +226,12 @@ function getElements(): UIElements {
         WebhookUrl: getEl<HTMLInputElement>('WebhookUrl'),
         OpenWindow: getEl<HTMLInputElement>('OpenWindow'),
         WindowUrl: getEl<HTMLInputElement>('WindowUrl'),
+        
+        nativeEnabled: getEl<HTMLInputElement>('nativeEnabled'),
+        nativeAppName: getEl<HTMLInputElement>('nativeAppName'),
+        socketEnabled: getEl<HTMLInputElement>('socketEnabled'),
+        socketUrl: getEl<HTMLInputElement>('socketUrl'),
+        
         debugMode: getEl<HTMLInputElement>('debugMode'),
         eventBufferSize: getEl<HTMLInputElement>('eventBufferSize'),
         wsEnabled: getEl<HTMLInputElement>('wsEnabled'),
@@ -218,6 +249,8 @@ function getElements(): UIElements {
         connectionStatus: getEl<HTMLElement>('connectionStatus'),
         WebhookOption_container: getEl<HTMLElement>('WebhookOption_container'),
         OpenWindow_container: getEl<HTMLElement>('OpenWindow_container'),
+        native_container: getEl<HTMLElement>('native_container'),
+        socket_container: getEl<HTMLElement>('socket_container'),
         popOutBtn: getEl<HTMLButtonElement>('popOutBtn'),
     };
 }
@@ -332,7 +365,9 @@ async function loadConfig() {
         currentConfig = { 
             ...defaultConfig, 
             ...stored,
-            websockets: { ...defaultConfig.websockets, ...(stored.websockets || {}) } 
+            websockets: { ...defaultConfig.websockets, ...(stored.websockets || {}) },
+            nativeMessaging: { ...defaultConfig.nativeMessaging, ...(stored.nativeMessaging || {}) },
+            socketStream: { ...defaultConfig.socketStream, ...(stored.socketStream || {}) }
         };
         
         updateUI();
@@ -351,6 +386,16 @@ function updateUI() {
     ui.WebhookUrl.value = currentConfig.WebhookUrl || '';
     ui.OpenWindow.checked = currentConfig.OpenWindow;
     ui.WindowUrl.value = currentConfig.WindowUrl || '';
+
+    // Native & Socket
+    if (currentConfig.nativeMessaging) {
+        ui.nativeEnabled.checked = currentConfig.nativeMessaging.enabled;
+        ui.nativeAppName.value = currentConfig.nativeMessaging.appName || '';
+    }
+    if (currentConfig.socketStream) {
+        ui.socketEnabled.checked = currentConfig.socketStream.enabled;
+        ui.socketUrl.value = currentConfig.socketStream.url || '';
+    }
 
     // Advanced
     ui.debugMode.checked = currentConfig.debugMode;
@@ -386,6 +431,18 @@ function updateCollapsibleVisibility() {
     } else {
         ui.OpenWindow_container.classList.remove('visible');
     }
+    
+    if (ui.nativeEnabled.checked) {
+        ui.native_container.classList.add('visible');
+    } else {
+        ui.native_container.classList.remove('visible');
+    }
+    
+    if (ui.socketEnabled.checked) {
+        ui.socket_container.classList.add('visible');
+    } else {
+        ui.socket_container.classList.remove('visible');
+    }
 }
 
 /**
@@ -399,6 +456,16 @@ function getConfigFromUI(): ExtensionConfig {
         WebhookUrl: ui.WebhookUrl.value.trim(),
         OpenWindow: ui.OpenWindow.checked,
         WindowUrl: ui.WindowUrl.value.trim(),
+        
+        nativeMessaging: {
+            enabled: ui.nativeEnabled.checked,
+            appName: ui.nativeAppName.value.trim()
+        },
+        socketStream: {
+            enabled: ui.socketEnabled.checked,
+            url: ui.socketUrl.value.trim()
+        },
+
         debugMode: ui.debugMode.checked,
         eventBufferSize: parseInt(ui.eventBufferSize.value) || 1000,
         websockets: {
@@ -431,6 +498,8 @@ function initEventListeners() {
         { el: ui.masterSwitch, key: 'masterSwitch' },
         { el: ui.WebhookOption, key: 'WebhookOption' },
         { el: ui.OpenWindow, key: 'OpenWindow' },
+        { el: ui.nativeEnabled, key: 'nativeEnabled' },
+        { el: ui.socketEnabled, key: 'socketEnabled' },
         { el: ui.debugMode, key: 'debugMode' },
         { el: ui.wsEnabled, key: 'wsEnabled' },
     ];
@@ -445,7 +514,9 @@ function initEventListeners() {
 
     // Inputs with debounce
     const inputs = [
-        ui.WebhookUrl, ui.WindowUrl, ui.eventBufferSize, 
+        ui.WebhookUrl, ui.WindowUrl, 
+        ui.nativeAppName, ui.socketUrl,
+        ui.eventBufferSize, 
         ui.wsMinSize, ui.wsMaxSize
     ];
 
