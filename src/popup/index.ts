@@ -557,6 +557,21 @@ function connectBackground() {
             if (msg.type === 'CONFIG_UPDATE') {
                 currentConfig = { ...currentConfig, ...msg.config };
                 updateUI();
+            } else if (msg.type === 'LOG_ENTRY') {
+                // Forward background logs to popup console
+                const { level, message, data, source } = msg.log;
+                const prefix = `[BG-${source}]`;
+                
+                // Only log if debug mode is on or it's important
+                // The logger already filters DEBUG logs based on debugMode state in background,
+                // but we might want to respect local debugMode too.
+                if (level === 'DEBUG' && !currentConfig.debugMode) return;
+
+                switch (level) {
+                   case 'ERROR': console.error(prefix, message, data || ''); break;
+                   case 'WARN': console.warn(prefix, message, data || ''); break;
+                   default: console.log(prefix, message, data || '');
+                }
             }
         });
         

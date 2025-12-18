@@ -22,6 +22,23 @@ async function initialize() {
         if (port.name === 'popup') {
             logger.debug('Popup connected');
             
+            // Forward logs to popup
+            const removeLogListener = logger.addListener((log) => {
+                try {
+                    port.postMessage({
+                        type: 'LOG_ENTRY',
+                        log: log
+                    });
+                } catch (e) {
+                    // Port likely disconnected
+                    removeLogListener();
+                }
+            });
+
+            port.onDisconnect.addListener(() => {
+                removeLogListener();
+            });
+            
             port.onMessage.addListener(async (message: any) => {
                 logger.debug('Received message on port:',"Popup", message);
                 

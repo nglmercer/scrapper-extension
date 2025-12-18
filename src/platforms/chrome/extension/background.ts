@@ -1,5 +1,5 @@
 import { ChromeBackgroundHelper } from '../index.js';
-import { rawInterceptor } from '@/index.js';
+import { rawInterceptor, logger } from '@/index.js';
 
 async function initialize() {
   try {
@@ -15,6 +15,23 @@ async function initialize() {
     chrome.runtime.onConnect.addListener((port) => {
       if (port.name === 'popup') {
           console.log('Popup connected');
+          
+          // Forward logs to popup
+          const removeLogListener = logger.addListener((log) => {
+              try {
+                  port.postMessage({
+                      type: 'LOG_ENTRY',
+                      log: log
+                  });
+              } catch (e) {
+                  // Port likely disconnected
+                  removeLogListener();
+              }
+          });
+
+          port.onDisconnect.addListener(() => {
+              removeLogListener();
+          });
           
           port.onMessage.addListener(async (message: any) => {
               console.log('Received message on port:', message);
