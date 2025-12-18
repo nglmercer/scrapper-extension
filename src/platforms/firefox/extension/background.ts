@@ -1,5 +1,8 @@
-import { websocketInterceptor as rawInterceptor, FirefoxBackgroundHelper } from '../index.js';
-import type { WebSocketConfig } from '../../../types/index.js';
+import { FirefoxBackgroundHelper } from '../index.js';
+import { rawInterceptor,logger } from '@/index.js';
+// --- USER PROVIDED LOGIC ---
+/* eslint-disable no-var */
+declare var browser: any;
 
 async function initialize() {
   try {
@@ -17,10 +20,10 @@ async function initialize() {
       // @ts-ignore
       browser.runtime.onConnect.addListener((port: any) => {
         if (port.name === 'popup') {
-            console.log('Popup connected');
+            logger.debug('Popup connected');
             
             port.onMessage.addListener(async (message: any) => {
-                console.log('Received message on port:', message);
+                logger.debug('Received message on port:',"Popup", message);
                 
                 if (message.type === 'GET_CONFIG') {
                     // Read full config from storage
@@ -36,7 +39,10 @@ async function initialize() {
                     if (message.config && message.config.websockets) {
                         (rawInterceptor as any).updateConfig(message.config.websockets);
                     }
-                    // Also broadcast to other contexts if needed
+                    // Update other config if needed
+                    if (message.config) {
+                        await rawInterceptor.updateConfig(message.config);
+                    }
                 }
             });
         }
@@ -45,7 +51,7 @@ async function initialize() {
 
     // Handle standard messages
     FirefoxBackgroundHelper.handleMessage(async (message, sender, sendResponse) => {
-      // console.log('Background received message:', message);
+      logger.debug('Background received message:',"Background", message);
       
       try {
         switch (message.type) {
@@ -62,19 +68,21 @@ async function initialize() {
             return { success: true, masterSwitch };
             
           case 'UPDATE_CONFIG':
-            if (message.config && message.config.websockets) {
-                (rawInterceptor as any).updateConfig(message.config.websockets);
+            if (message.config) {
+                await rawInterceptor.updateConfig(message.config);
             }
             return { success: true };
             
           case 'RAW_DATA_EVENT':
-             // Handle intercepted data
-             console.log('Background Intercepted:', message.payload);
-             return { success: true };
+             //logger.debug('Background Intercepted:',"Background", message.payload);
+             // Delegate to core
+             await rawInterceptor.processEvent(message);
+             return {
+                 success: true,
+             };
 
           default:
             // return { success: false, error: 'Unknown message type' };
-            // Don't return error for unknown messages as they might be handled by other listeners
             break; 
         }
       } catch (error: any) {
@@ -89,19 +97,13 @@ async function initialize() {
         // @ts-ignore
         browser.storage.onChanged.addListener((changes: any, namespace: any) => {
             if (namespace === 'local') {
-                if (changes.websockets && changes.websockets.newValue) {
-                    (rawInterceptor as any).updateConfig(changes.websockets.newValue);
-                }
-                if (changes.masterSwitch) {
-                    if (changes.masterSwitch.newValue !== rawInterceptor.isEnabled()) {
-                        rawInterceptor.toggleMasterSwitch();
-                    }
-                }
-                if (changes.debugMode) {
-                    if (changes.debugMode.newValue !== rawInterceptor.isDebugMode()) {
-                        rawInterceptor.toggleDebugMode();
-                    }
-                }
+                // The core interceptor has its own storage listener, 
+                // but if we need to sync anything specific here, we can.
+                // Generally, rawInterceptor.initialize() sets up the listener in core.
+                // So we might not need this unless there are Firefox specific quirks.
+                
+                // However, we should ensure the interceptor updates if storage changes
+                // The core 'setupConfigListener' does this.
             }
         });
     }

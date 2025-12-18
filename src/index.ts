@@ -11,24 +11,34 @@ import type {
   StorageChanges
 } from './types/index.js';
 
+// Declare chrome API availability
+declare var chrome: any;
+
+
 import { CrossPlatformStorage, StorageFactory, DEFAULT_CONFIG } from './core/storage.js';
 import { WebSocketInterceptor } from './core/interceptor.js';
+import { logger, Logger } from './core/logger.js';
 
 // Re-export everything
 export * from './types/index.js';
 export * from './core/storage.js';
 export * from './core/interceptor.js';
+export * from './core/logger.js';
 export * from './platforms/chrome/storage-polyfill.js';
 export * from './platforms/chrome/runtime-polyfill.js';
 
 /**
  * Main RAW Interceptor class that orchestrates all components
  */
-export class RAWInterceptor {
+class RAWInterceptor {
   private isInitialized = false;
   private storage: CrossPlatformStorage;
   private interceptor: WebSocketInterceptor;
   private config: InterceptorConfig;
+
+  // Chat tab management state
+  private chatTabId: number | null = null;
+  private tabCreationPromise: Promise<number> | null = null;
 
   private configListenerCleanup: (() => void) | null = null;
 
@@ -59,10 +69,11 @@ export class RAWInterceptor {
   /**
    * Safe logger that respects debug mode
    */
+  /**
+   * Safe logger that respects debug mode
+   */
   private log(message: string, ...args: unknown[]): void {
-    if (this.isDebugMode()) {
-      console.log(`[RAW Interceptor] ${message}`, ...args);
-    }
+    logger.debug(message, 'RAWInterceptor', args);
   }
 
   /**
@@ -79,10 +90,13 @@ export class RAWInterceptor {
       const storedConfig = await this.storage.loadConfig();
       this.config = { ...this.config, ...storedConfig };
       
+      // Update logger debug mode
+      logger.setDebugMode(this.config.debugMode);
+
       // Update interceptor with WebSocket config
       this.interceptor.updateConfig(this.config.websockets);
       
-      // Set debug mode
+      // Set debug mode on interceptor
       if (this.config.debugMode !== this.interceptor.isDebugMode()) {
         this.interceptor.toggleDebugMode();
       }
@@ -98,10 +112,22 @@ export class RAWInterceptor {
       // Set up configuration change listener
       this.setupConfigListener();
 
+      // Set up tab removal listener if in extension environment
+      if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.onRemoved) {
+        chrome.tabs.onRemoved.addListener((tabId: number) => {
+            if (tabId === this.chatTabId) {
+                this.log('El usuario ha cerrado la pestaña de chat. Reiniciando estado.');
+                this.chatTabId = null;
+                this.tabCreationPromise = null;
+            }
+        });
+      }
+
       this.isInitialized = true;
+
       this.log('Initialized successfully');
     } catch (error) {
-      console.error('[RAW Interceptor] Failed to initialize:', error);
+      logger.error('Failed to initialize', 'RAWInterceptor', error);
       throw error;
     }
   }
@@ -124,7 +150,7 @@ export class RAWInterceptor {
       this.isInitialized = false;
       this.log('Destroyed');
     } catch (error) {
-      console.error('[RAW Interceptor] Error destroying:', error);
+      logger.error('Error destroying', 'RAWInterceptor', error);
       throw error;
     }
   }
@@ -153,8 +179,11 @@ export class RAWInterceptor {
       }
       
       // Update debug mode if changed
-      if (newConfig.debugMode !== undefined && newConfig.debugMode !== this.interceptor.isDebugMode()) {
-        this.interceptor.toggleDebugMode();
+      if (newConfig.debugMode !== undefined) {
+          logger.setDebugMode(newConfig.debugMode);
+          if (newConfig.debugMode !== this.interceptor.isDebugMode()) {
+            this.interceptor.toggleDebugMode();
+          }
       }
       
       // Update master switch if changed
@@ -164,7 +193,7 @@ export class RAWInterceptor {
       
       this.log('Configuration updated');
     } catch (error) {
-      console.error('[RAW Interceptor] Error updating configuration:', error);
+      logger.error('Error updating configuration', 'RAWInterceptor', error);
       throw error;
     }
   }
@@ -179,10 +208,12 @@ export class RAWInterceptor {
       await this.updateConfig(defaultConfig);
       this.log('Configuration reset to defaults');
     } catch (error) {
-      console.error('[RAW Interceptor] Error resetting configuration:', error);
+       logger.error('Error resetting configuration', 'RAWInterceptor', error);
       throw error;
     }
   }
+  
+  // ... (Stats, connections remain same, just ensure they work) ...
 
   /**
    * Get interceptor statistics
@@ -203,6 +234,7 @@ export class RAWInterceptor {
    */
   toggleDebugMode(): boolean {
     const newMode = this.interceptor.toggleDebugMode();
+    logger.setDebugMode(newMode);
     this.updateConfig({ debugMode: newMode });
     return newMode;
   }
@@ -257,6 +289,7 @@ export class RAWInterceptor {
             
             if (changes.debugMode) {
               const debugMode = changes.debugMode.newValue ?? false;
+              logger.setDebugMode(debugMode);
               if (debugMode !== this.interceptor.isDebugMode()) {
                 this.interceptor.toggleDebugMode();
               }
@@ -269,18 +302,173 @@ export class RAWInterceptor {
               }
             }
           }).catch((error: unknown) => {
-            console.error('Error handling configuration change:', error);
+            logger.error('Error handling configuration change', 'RAWInterceptor', error);
           });
         }
       } catch (error) {
-        console.error('Error in configuration change listener:', error);
+        logger.error('Error in configuration change listener', 'RAWInterceptor', error);
       }
     });
+  }
+
+  /**
+   * Process an intercepted event: Send webhook and/or handle new window
+   */
+  async processEvent(message: any): Promise<void> {
+      const { WebhookUrl, WebhookOption, OpenWindow, WindowUrl } = this.config;
+      
+      const now = new Date().toLocaleString();
+      const payloadWithTime = {
+          ...message.payload,
+          time: now
+      };
+      
+      if (WebhookOption && WebhookUrl) {
+          await this.sendWebhook(WebhookUrl, payloadWithTime);
+      }
+      
+      if (OpenWindow && WindowUrl) {
+          await this.handleNewWindow(message);
+      }
+  }
+
+  /**
+   * Send data to the configured webhook
+   */
+  async sendWebhook(url: string, data: any): Promise<{ success: boolean; result?: any; error?: any }> {
+    try {
+      this.log('Enviando webhook...');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json().catch(() => response.text());
+      this.log('Webhook enviado exitosamente:', result);
+      return { success: true, result };
+      
+    } catch (error: any) {
+      logger.error('Error enviando webhook', 'RAWInterceptor', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Handle opening/updating the separate chat window/tab
+   */
+  async handleNewWindow(eventData: any): Promise<void> {
+      if (typeof chrome === 'undefined' || !chrome.tabs) {
+          return;
+      }
+      
+      const { WindowUrl, OpenWindow } = this.config;
+      if (!OpenWindow || !WindowUrl) {
+           // this.log('Opción de ventana/pestaña nueva deshabilitada.');
+          return;
+      }
+
+      try {
+          this.log('Evento recibido. Obteniendo o creando la pestaña de chat...');
+          const tabId = await this.getOrCreateChatTab(WindowUrl);
+          
+          this.log(`Pestaña lista con ID: ${tabId}. Enviando mensaje.`);
+          this.sendMessageToTab(tabId, eventData);
+
+      } catch (error) {
+          logger.error('Error final en el flujo de manejo de la pestaña', 'RAWInterceptor', error);
+      }
+  }
+
+  // ... (private helpers getOrCreateChatTab, waitForTabLoad, sendMessageToTab stay mostly same but use this.log / logger.error) ...
+
+  private getOrCreateChatTab(windowUrl: string): Promise<number> {
+      if (this.tabCreationPromise) {
+          this.log('Una operación de creación de pestaña ya está en curso. Esperando su resultado...');
+          return this.tabCreationPromise;
+      }
+
+      this.tabCreationPromise = new Promise(async (resolve, reject) => {
+          try {
+              // @ts-ignore
+              const tabs = await chrome.tabs.query({ url: windowUrl + "*" });
+
+              if (tabs.length > 0) {
+                  this.log('Pestaña de chat encontrada, reutilizándola.');
+                  const targetTab = tabs[0];
+                  this.chatTabId = targetTab.id;
+                  
+                  await this.waitForTabLoad(this.chatTabId!);
+                  resolve(this.chatTabId!);
+
+              } else {
+                  this.log('Pestaña de chat no encontrada, creando una nueva en segundo plano.');
+                  // @ts-ignore
+                  const newTab = await chrome.tabs.create({ url: windowUrl, active: false });
+                  this.chatTabId = newTab.id;
+
+                  await this.waitForTabLoad(this.chatTabId!);
+                  resolve(this.chatTabId!);
+              }
+          } catch (error) {
+              logger.error('Error durante la creación/búsqueda de la pestaña', 'RAWInterceptor', error);
+              this.chatTabId = null;
+              this.tabCreationPromise = null;
+              reject(error);
+          }
+      });
+
+      return this.tabCreationPromise;
+  }
+
+  private waitForTabLoad(tabId: number): Promise<void> {
+      return new Promise(async (resolve) => {
+          try {
+            // @ts-ignore
+            const tab = await chrome.tabs.get(tabId);
+            if (tab.status === 'complete') {
+                resolve();
+                return;
+            }
+
+            const listener = (updatedTabId: number, changeInfo: any) => {
+                if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                    // @ts-ignore
+                    chrome.tabs.onUpdated.removeListener(listener);
+                    resolve();
+                }
+            };
+            // @ts-ignore
+            chrome.tabs.onUpdated.addListener(listener);
+          } catch (e) {
+            resolve();
+          }
+      });
+  }
+
+  private sendMessageToTab(tabId: number, message: any) {
+    // @ts-ignore
+    if (chrome.scripting) {
+      // @ts-ignore
+      chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        func: (msg: any) => {
+          window.postMessage(msg, window.location.origin);
+        },
+        args: [message]
+      }).catch((e: any) => logger.error('Error sending message to tab', 'RAWInterceptor', e));
+    }
   }
 }
 
 // Export singleton instance
-export const rawInterceptor = new RAWInterceptor();
-
+const rawInterceptor = new RAWInterceptor();
+export { rawInterceptor,RAWInterceptor };
 // Default export
 export default RAWInterceptor;

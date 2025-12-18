@@ -1,4 +1,5 @@
-import { websocketInterceptor as rawInterceptor, ChromeBackgroundHelper } from '../index.js';
+import { ChromeBackgroundHelper } from '../index.js';
+import { rawInterceptor } from '@/index.js';
 
 async function initialize() {
   try {
@@ -15,7 +16,7 @@ async function initialize() {
       if (port.name === 'popup') {
           console.log('Popup connected');
           
-          port.onMessage.addListener(async (message) => {
+          port.onMessage.addListener(async (message: any) => {
               console.log('Received message on port:', message);
               
               if (message.type === 'GET_CONFIG') {
@@ -29,11 +30,9 @@ async function initialize() {
                       config: stored
                   });
               } else if (message.type === 'UPDATE_CONFIG') {
-                  // Update interceptor config if present
-                  if (message.config && message.config.websockets) {
-                      (rawInterceptor as any).updateConfig(message.config.websockets);
+                  if (message.config) {
+                      await rawInterceptor.updateConfig(message.config);
                   }
-                  // Also broadcast to other contexts if needed
               }
           });
       }
@@ -58,14 +57,15 @@ async function initialize() {
             return { success: true, masterSwitch };
             
           case 'UPDATE_CONFIG':
-            if (message.config && message.config.websockets) {
-                (rawInterceptor as any).updateConfig(message.config.websockets);
+            if (message.config) {
+                await rawInterceptor.updateConfig(message.config);
             }
             return { success: true };
             
           case 'RAW_DATA_EVENT':
-             // Handle intercepted data
+             // Handle intercepted data via core
              console.log('Background Intercepted:', message.payload);
+             await rawInterceptor.processEvent(message);
              return { success: true };
 
           default:
@@ -78,24 +78,8 @@ async function initialize() {
       }
     });
     
-    // Listen for storage changes
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'local') {
-            if (changes.websockets && changes.websockets.newValue) {
-                (rawInterceptor as any).updateConfig(changes.websockets.newValue);
-            }
-            if (changes.masterSwitch) {
-                if (changes.masterSwitch.newValue !== rawInterceptor.isEnabled()) {
-                    rawInterceptor.toggleMasterSwitch();
-                }
-            }
-            if (changes.debugMode) {
-                if (changes.debugMode.newValue !== rawInterceptor.isDebugMode()) {
-                    rawInterceptor.toggleDebugMode();
-                }
-            }
-        }
-    });
+    // Listen for storage changes (Core handles this, but we keep an empty listener for compatibility if needed or removed)
+    // The core rawInterceptor.initialize() sets up the storage listener.
 
   } catch (error) {
     console.error('Failed to initialize background script:', error);

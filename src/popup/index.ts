@@ -232,7 +232,6 @@ let excludeTagInput: TagInput;
 function initTabs() {
     ui.tabButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-             // ... existing tab logic
              // Remove active class from all
             ui.tabButtons.forEach(b => b.classList.remove('active'));
             ui.tabContents.forEach(c => c.classList.remove('active'));

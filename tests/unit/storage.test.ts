@@ -4,8 +4,8 @@
 
 /// <reference types="bun-types" />
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { CrossPlatformStorage, StorageFactory, DEFAULT_CONFIG } from '@/core/storage.js';
-import { chromeStorage } from '@/platforms/chrome/storage-polyfill.js';
+import { CrossPlatformStorage, StorageFactory, DEFAULT_CONFIG } from '../../src/core/storage.js';
+import { chromeStorage } from '../../src/platforms/chrome/storage-polyfill.js';
 
 describe('CrossPlatformStorage', () => {
   let storage: CrossPlatformStorage;
@@ -114,7 +114,7 @@ describe('CrossPlatformStorage', () => {
 
   test('should notify change listeners', async () => {
     const changes: any[] = [];
-    const unsubscribe = storage.onChanged((change) => {
+    const unsubscribe = storage.onChanged((change: any) => {
       changes.push(change);
     });
 

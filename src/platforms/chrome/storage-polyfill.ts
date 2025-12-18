@@ -220,6 +220,124 @@ class MockStorageArea implements ChromeStorageArea {
   }
 }
 
+
+/**
+ * Wrapper for native Chrome Storage Area to ensure Promise support
+ */
+class PromisifiedStorageArea implements ChromeStorageArea {
+  constructor(private delegate: any) {}
+
+  get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
+  get(keys: string | string[] | Record<string, unknown> | null, callback: (items: Record<string, unknown>) => void): void;
+  get(keys?: unknown, callback?: unknown): unknown {
+    if (callback) {
+      if (this.delegate) {
+        return this.delegate.get(keys, callback);
+      }
+      return; 
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        if (!this.delegate) {
+            resolve({});
+            return;
+        }
+        this.delegate.get(keys, (items: Record<string, unknown>) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(items || {});
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  set(items: Record<string, unknown>): Promise<void>;
+  set(items: Record<string, unknown>, callback: () => void): void;
+  set(items: unknown, callback?: unknown): unknown {
+    if (callback) {
+      if (this.delegate) return this.delegate.set(items, callback);
+      return;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      try {
+        if (!this.delegate) {
+             resolve();
+             return;
+        }
+        this.delegate.set(items, () => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve();
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  remove(keys: string | string[]): Promise<void>;
+  remove(keys: string | string[], callback: () => void): void;
+  remove(keys: unknown, callback?: unknown): unknown {
+    if (callback) {
+        if (this.delegate) return this.delegate.remove(keys, callback);
+        return;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      try {
+        if (!this.delegate) {
+             resolve();
+             return;
+        }
+        this.delegate.remove(keys, () => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve();
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  clear(): Promise<void>;
+  clear(callback: () => void): void;
+  clear(callback?: unknown): unknown {
+    if (callback) {
+        if (this.delegate) return this.delegate.clear(callback);
+        return;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      try {
+        if (!this.delegate) {
+             resolve();
+             return;
+        }
+        this.delegate.clear(() => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve();
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+}
+
 /**
  * Chrome Storage API implementation with fallback support
  */
@@ -238,10 +356,11 @@ export class ChromeStoragePolyfill implements ChromeStorage {
   constructor() {
     // Try to use real Chrome storage API if available
     if (typeof chrome !== 'undefined' && chrome.storage) {
-      this.local = chrome.storage.local;
-      this.sync = chrome.storage.sync;
-      this.managed = chrome.storage.managed;
-      this.session = chrome.storage.session;
+      this.local = new PromisifiedStorageArea(chrome.storage.local);
+      if (chrome.storage.sync) this.sync = new PromisifiedStorageArea(chrome.storage.sync);
+      if (chrome.storage.managed) this.managed = new PromisifiedStorageArea(chrome.storage.managed);
+      if (chrome.storage.session) this.session = new PromisifiedStorageArea(chrome.storage.session);
+      
       this.onChanged = chrome.storage.onChanged;
     } else {
       // Fallback to mock implementation
