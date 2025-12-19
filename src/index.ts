@@ -634,10 +634,15 @@ class RAWInterceptor {
       // @ts-ignore
       chrome.scripting.executeScript({
         target: { tabId: tabId },
-        func: (msg: any) => {
-          window.postMessage(msg, window.location.origin);
+        func: (msgStr: string) => {
+          try {
+             const msg = JSON.parse(msgStr);
+             window.postMessage(msg, window.location.origin);
+          } catch (e) {
+             console.error('Failed to parse message in tab', e);
+          }
         },
-        args: [message]
+        args: [JSON.stringify(message)]
       }).catch((e: any) => logger.error('Error sending message to tab', 'RAWInterceptor', e));
     }
   }

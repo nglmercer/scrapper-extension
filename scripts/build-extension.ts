@@ -23,32 +23,43 @@ if (fs.existsSync(outDir)) {
 fs.mkdirSync(outDir, { recursive: true });
 
 // Build steps
-const entrypoints = [
-  path.join(srcDir, 'background.ts'),
-  path.join(srcDir, 'content.ts'),
-  path.join(srcDir, 'injected.ts')
-];
-
-// Check if entrypoints exist
-entrypoints.forEach(file => {
-    if (!fs.existsSync(file)) {
-        console.error(`Error: Entrypoint not found: ${file}`);
-        process.exit(1);
-    }
-});
-
-const result = await build({
-  entrypoints,
+// Build steps
+// Background - ESM (Service Worker / Module)
+const bgResult = await build({
+  entrypoints: [path.join(srcDir, 'background.ts')],
   outdir: outDir,
   target: 'browser',
   format: 'esm',
-  splitting: false, // Keep individual files for simplicity in manifest mapping
+  naming: '[name].js', // background.js
 });
 
-if (!result.success) {
-  console.error("Build failed:", result.logs);
+if (!bgResult.success) {
+  console.error("Background Build failed:", bgResult.logs);
   process.exit(1);
 }
+
+// Content scripts & Injected - IIFE (Isolated/Global scope safe)
+const contentResult = await build({
+  entrypoints: [
+      path.join(srcDir, 'content.ts'),
+      path.join(srcDir, 'injected.ts')
+  ],
+  outdir: outDir,
+  target: 'browser',
+  format: 'iife', 
+  naming: '[name].js', // content.js, injected.js
+});
+
+if (!contentResult.success) {
+  // Fallback to ESM if IIFE fails (older Bun versions might verify support) 
+  // or just error out. 
+  // Note: If 'iife' is not supported, this will fail. 
+  // Assuming recent Bun version.
+  console.error("Content/Injected Build failed:", contentResult.logs);
+  process.exit(1);
+}
+
+
 
 // Generate Manifest
 const manifest = createManifest(platform);

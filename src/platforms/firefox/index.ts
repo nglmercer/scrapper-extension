@@ -184,15 +184,21 @@ export class FirefoxContentHelper {
    */
   private static injectInterceptorScript(): void {
     try {
+      if (document.getElementById('raw-interceptor-injected')) {
+          return;
+      }
+      
       const runtime = (globalThis as any).browser?.runtime || (globalThis as any).chrome?.runtime;
       if (!runtime) {
          console.error('Runtime not available for injection');
          return;
       }
       const script = document.createElement('script');
+      script.id = 'raw-interceptor-injected';
       script.src = runtime.getURL('injected.js');
+      // Use standard loading to ensure execution order, but add an attribute to mark it
       script.onload = () => {
-        script.remove();
+        // script.remove(); // Keep it to prevent re-injection attempts
         console.log('WebSocket interceptor script injected');
       };
       script.onerror = () => {
