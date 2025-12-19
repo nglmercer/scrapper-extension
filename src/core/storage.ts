@@ -165,7 +165,6 @@ export class CrossPlatformStorage implements PlatformStorage {
         'WebhookOption',
         'WindowUrl',
         'OpenWindow',
-        'OpenWindow',
         'eventBufferSize',
         'nativeMessaging',
         'socketStream',

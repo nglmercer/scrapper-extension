@@ -18,6 +18,7 @@ declare var chrome: any;
 import { CrossPlatformStorage, StorageFactory, DEFAULT_CONFIG } from './core/storage.js';
 import { WebSocketInterceptor } from './core/interceptor.js';
 import { logger, Logger } from './core/logger.js';
+import { withTimestamp } from './utils/common.js';
 
 // Re-export everything
 export * from './types/index.js';
@@ -449,11 +450,7 @@ class RAWInterceptor {
           nativeMessaging, socketStream
       } = this.config;
       
-      const now = new Date().toLocaleString();
-      const payloadWithTime = {
-          ...message.payload,
-          time: now
-      };
+      const payloadWithTime = withTimestamp(message.payload);
       
       // 1. Webhook
       if (WebhookOption && WebhookUrl) {
