@@ -544,6 +544,24 @@ export class WebSocketInterceptor implements DataInterceptor {
     if (data instanceof ArrayBuffer) {
       return new Uint8Array(data);
     }
+    if (typeof data === 'string') {
+      const match = data.match(/^42(\d+)?(.*)$/);
+
+      if (!match) return data;
+
+      //const ackId = match[1];
+      const jsonStr = match[2];
+      try {
+        const parsed = JSON.parse(jsonStr!);
+        return parsed
+        } catch (e) {
+            // Failed to parse, treat as normal string
+            if (this.debugMode) {
+                console.warn('[WebSocket Interceptor] Failed to decode Socket.IO message:', e);
+            }
+        }
+    }
+
     return data;
   }
 

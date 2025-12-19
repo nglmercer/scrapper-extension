@@ -39,6 +39,7 @@
     "build:firefox": "bun build src/platforms/firefox/index.ts --outdir dist/platforms/firefox --format esm --target browser",
     "build:firefox:extension": "bun run scripts/build-extension.ts firefox",
     "build:electron": "bun build src/platforms/electron/index.ts --outdir dist/platforms/electron --format cjs --target node",
+    "build:media_app": "bun build src/platforms/media_app/index.ts --outdir dist/platforms/media_app --format cjs --target browser",
     "build:all": "bun run build && bun run build:chrome && bun run build:chrome:extension && bun run build:firefox:extension && bun run build:electron",
     "test": "bun test",
     "type-check": "tsc --noEmit",
