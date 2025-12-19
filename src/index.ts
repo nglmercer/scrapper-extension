@@ -27,6 +27,7 @@ export * from './core/interceptor.js';
 export * from './core/logger.js';
 export * from './platforms/chrome/storage-polyfill.js';
 export * from './platforms/chrome/runtime-polyfill.js';
+export * from './platforms/media_app/index.js'; // Tauri support
 
 /**
  * Main RAW Interceptor class that orchestrates all components

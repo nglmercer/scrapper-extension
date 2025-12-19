@@ -1,6 +1,9 @@
+function getVersion(){
+  return require('../package.json')?.version || '1.0.0';
+}
 export const baseManifest = {
   name: "RAW Data Interceptor",
-  version: "3.1.0",
+  version: getVersion(),
   description: "Cross-platform WebSocket data interceptor for Chrome, Firefox, and Electron",
   icons: {
     "16": "icons/icon-16.png",
