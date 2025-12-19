@@ -42,7 +42,8 @@ export class CrossPlatformStorage implements PlatformStorage {
   private isInitialized = false;
 
   constructor(
-    private storageArea: 'local' | 'sync' | 'managed' | 'session' = 'local'
+    private storageArea: 'local' | 'sync' | 'managed' | 'session' = 'local',
+    private backend: { [key: string]: any } = chromeStorage
   ) {
     this.initialize();
   }
@@ -51,11 +52,13 @@ export class CrossPlatformStorage implements PlatformStorage {
     if (this.isInitialized) return;
 
     // Set up storage change listener
-    chromeStorage.onChanged.addListener((changes, areaName) => {
-      if (areaName === this.storageArea) {
-        this.notifyListeners(changes);
-      }
-    });
+    if (this.backend.onChanged) {
+        this.backend.onChanged.addListener((changes: any, areaName: string) => {
+          if (areaName === this.storageArea) {
+            this.notifyListeners(changes as StorageChanges);
+          }
+        });
+    }
 
     this.isInitialized = true;
   }
@@ -146,7 +149,7 @@ export class CrossPlatformStorage implements PlatformStorage {
   }
 
   private getStorageArea() {
-    const storage = chromeStorage[this.storageArea];
+    const storage = this.backend[this.storageArea];
     if (!storage) {
       throw new Error(`Storage area '${this.storageArea}' is not available`);
     }
@@ -233,11 +236,14 @@ export class CrossPlatformStorage implements PlatformStorage {
 export class StorageFactory {
   private static instances = new Map<string, CrossPlatformStorage>();
 
-  static create(storageArea: 'local' | 'sync' | 'managed' | 'session' = 'local'): CrossPlatformStorage {
-    const key = storageArea;
+  static create(
+    storageArea: 'local' | 'sync' | 'managed' | 'session' = 'local',
+    backend?: { [key: string]: any }
+  ): CrossPlatformStorage {
+    const key = storageArea + (backend ? '_custom' : '');
     
     if (!this.instances.has(key)) {
-      this.instances.set(key, new CrossPlatformStorage(storageArea));
+      this.instances.set(key, new CrossPlatformStorage(storageArea, backend));
     }
     
     return this.instances.get(key)!;

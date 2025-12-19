@@ -10,28 +10,32 @@ export const baseManifest = {
 };
 
 export function createManifest(platform: 'chrome' | 'firefox') {
-  const isChrome = platform === 'chrome';
+  const commonPermissions = [
+    "storage", 
+    "scripting",
+    "tabs",
+    "nativeMessaging" // Required for the Native Host feature
+  ];
 
-  if (isChrome) {
+  const commonHostPermissions = [
+    "<all_urls>"
+  ];
+
+  if (platform === 'chrome') {
     // Manifest V3 for Chrome
     return {
       manifest_version: 3,
       ...baseManifest,
       permissions: [
-        "storage", 
-        "webRequest", 
-        // "webRequestBlocking", // Not available in MV3 usually, but keep if needed for declarativeNetRequest logic later. Removed for strict MV3 compliance unless needed.
-        // Actually webRequest is restricted in MV3. 
-        // But let's assume standard permissions for now.
+        ...commonPermissions,
+        // Chrome specific additions if any
       ],
-      host_permissions: [
-        "<all_urls>"
-      ],
+      host_permissions: commonHostPermissions,
       background: {
         service_worker: "background.js",
         type: "module"
       },
-      action: { // browser_action -> action in MV3
+      action: {
         default_title: baseManifest.name,
         default_popup: "popup.html",
         default_icon: baseManifest.icons
@@ -51,21 +55,25 @@ export function createManifest(platform: 'chrome' | 'firefox') {
       ]
     };
   } else {
-    // Manifest V2 for Firefox
+    // Manifest V3 for Firefox
     return {
-      manifest_version: 2,
+      manifest_version: 3,
       ...baseManifest,
+      browser_specific_settings: {
+        gecko: {
+          id: "nglmercer@gmail.com" // Fixed ID for native messaging to work consistently
+        }
+      },
       permissions: [
-        "storage",
-        "webRequest",
-        "webRequestBlocking",
-        "<all_urls>"
+        ...commonPermissions,
+        // Firefox specific additions
       ],
+      host_permissions: commonHostPermissions,
       background: {
         scripts: ["background.js"],
-        type: "module"
+        type: "module" // Important for ES modules in background
       },
-      browser_action: {
+      action: {
         default_title: baseManifest.name,
         default_popup: "popup.html",
         default_icon: baseManifest.icons
@@ -78,7 +86,10 @@ export function createManifest(platform: 'chrome' | 'firefox') {
         }
       ],
       web_accessible_resources: [
-        "injected.js"
+        {
+          resources: ["injected.js"],
+          matches: ["<all_urls>"]
+        }
       ]
     };
   }

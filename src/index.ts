@@ -552,10 +552,21 @@ class RAWInterceptor {
 
       this.tabCreationPromise = new Promise(async (resolve, reject) => {
           try {
+              let tabs: any[] = [];
+              /* eslint-disable no-undef */
               // @ts-ignore
-              const tabs = await chrome.tabs.query({ url: windowUrl + "*" });
+              if (typeof browser !== 'undefined' && browser.tabs) {
+                  // @ts-ignore
+                  tabs = await browser.tabs.query({ url: windowUrl + "*" });
+              } else if (typeof chrome !== 'undefined' && chrome.tabs) {
+                   // @ts-ignore
+                   tabs = await new Promise((res) => {
+                       // @ts-ignore
+                       chrome.tabs.query({ url: windowUrl + "*" }, (result) => res(result));
+                   });
+              }
 
-              if (tabs.length > 0) {
+              if (tabs && tabs.length > 0) {
                   this.log('Pestaña de chat encontrada, reutilizándola.');
                   const targetTab = tabs[0];
                   this.chatTabId = targetTab.id;
@@ -565,8 +576,17 @@ class RAWInterceptor {
 
               } else {
                   this.log('Pestaña de chat no encontrada, creando una nueva en segundo plano.');
+                  let newTab: any;
+                  
                   // @ts-ignore
-                  const newTab = await chrome.tabs.create({ url: windowUrl, active: false });
+                  if (typeof browser !== 'undefined' && browser.tabs) {
+                       // @ts-ignore
+                       newTab = await browser.tabs.create({ url: windowUrl, active: false });
+                  } else {
+                       // @ts-ignore
+                       newTab = await chrome.tabs.create({ url: windowUrl, active: false });
+                  }
+
                   this.chatTabId = newTab.id;
 
                   await this.waitForTabLoad(this.chatTabId!);

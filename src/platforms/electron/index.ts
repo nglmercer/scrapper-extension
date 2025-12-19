@@ -130,7 +130,35 @@ export class ElectronMainHelper {
     }
 
     console.log('Electron main process initialized');
+    
+    // Initialize RAW Interceptor in Main Process
+    this.initializeInterceptor();
+    
     this.isInitialized = true;
+  }
+  
+  private static async initializeInterceptor() {
+      try {
+          // Dynamic require to avoid bundling issues if not needed
+          const { RAWInterceptor } = require('../../index.js');
+          const { CrossPlatformStorage } = require('../../core/storage.js');
+          const { electronStorage } = require('./storage-polyfill.js');
+          
+          // Create storage using Electron backend
+          const storage = new CrossPlatformStorage('local', electronStorage);
+          
+          // Create custom interceptor instance
+          const rawInterceptor = new RAWInterceptor(storage);
+          await rawInterceptor.initialize();
+          
+          console.log('RAW Interceptor initialized in Electron Main Process');
+          
+          // Store instance globally or in a static property if needed
+          (global as any).rawInterceptor = rawInterceptor;
+          
+      } catch (e) {
+          console.error('Failed to initialize RAW Interceptor in Main:', e);
+      }
   }
 
   /**
@@ -148,7 +176,8 @@ export class ElectronMainHelper {
     ipcMain.handle('raw-interceptor:get-config', async () => {
       try {
         const { CrossPlatformStorage } = require('../../core/storage.js');
-        const storage = new CrossPlatformStorage('local');
+        const { electronStorage } = require('./storage-polyfill.js');
+        const storage = new CrossPlatformStorage('local', electronStorage);
         return await storage.loadConfig();
       } catch (error) {
         console.error('Error getting config:', error);
@@ -160,8 +189,15 @@ export class ElectronMainHelper {
     ipcMain.handle('raw-interceptor:set-config', async (event: any, config: any) => {
       try {
         const { CrossPlatformStorage } = require('../../core/storage.js');
-        const storage = new CrossPlatformStorage('local');
+        const { electronStorage } = require('./storage-polyfill.js');
+        const storage = new CrossPlatformStorage('local', electronStorage);
         await storage.saveConfig(config);
+        
+        // Also update the running interceptor if possible
+        if ((global as any).rawInterceptor) {
+            await (global as any).rawInterceptor.updateConfig(config);
+        }
+        
         return { success: true };
       } catch (error: any) {
         console.error('Error setting config:', error);
@@ -172,8 +208,16 @@ export class ElectronMainHelper {
     // Handle WebSocket data from renderer
     ipcMain.handle('raw-interceptor:websocket-data', async (event: any, data: any) => {
       try {
-        // Process WebSocket data in main process
-        console.log('WebSocket data received in main process:', data);
+        // Process WebSocket data in main process using the Interceptor logic
+        if ((global as any).rawInterceptor) {
+             const message = {
+                 type: 'RAW_DATA_EVENT',
+                 payload: data
+             };
+             await (global as any).rawInterceptor.processEvent(message);
+        } else {
+             console.log('WebSocket data received (No Interceptor):', data);
+        }
         return { success: true };
       } catch (error: any) {
         console.error('Error processing WebSocket data:', error);
@@ -278,6 +322,39 @@ export class ElectronPreloadHelper {
     });
 
     console.log('Electron APIs exposed to renderer');
+  }
+
+  /**
+   * Initialize and setup the WebSocket interceptor in the preload script
+   * to automatically forward captured data to the main process.
+   */
+  static async setupInterceptor(): Promise<void> {
+    if (!ElectronPlatformUtils.isRenderer()) return;
+    
+    const { websocketInterceptor } = require('../../core/interceptor.js');
+    const { ipcRenderer } = ElectronPlatformUtils.safeRequire('electron') || {};
+    
+    if (!ipcRenderer) return;
+
+    // Load config from main process first
+    try {
+        const config = await ipcRenderer.invoke('raw-interceptor:get-config');
+        if (config && config.websockets) {
+            websocketInterceptor.updateConfig(config.websockets);
+        }
+    } catch (e) {
+        console.warn('Failed to load initial config in preload:', e);
+    }
+
+    // Initialize interceptor
+    await websocketInterceptor.initialize();
+    
+    // Forward messages
+    websocketInterceptor.onMessage((message: any) => {
+        ipcRenderer.invoke('raw-interceptor:websocket-data', message);
+    });
+    
+    console.log('Electron WebSocket Interceptor setup complete');
   }
 }
 
