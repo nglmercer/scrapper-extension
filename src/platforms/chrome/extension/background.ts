@@ -14,7 +14,7 @@ async function initialize() {
     // Handle port connections (from popup)
     chrome.runtime.onConnect.addListener((port) => {
       if (port.name === 'popup') {
-          console.log('Popup connected');
+          logger.debug('Popup connected');
           
           // Forward logs to popup
           const removeLogListener = logger.addListener((log) => {
@@ -34,7 +34,7 @@ async function initialize() {
           });
           
           port.onMessage.addListener(async (message: any) => {
-              console.log('Received message on port:', message);
+              logger.debug('Received message on port:', "Popup", message);
               
               if (message.type === 'GET_CONFIG') {
                   // Read full config from storage
@@ -47,6 +47,11 @@ async function initialize() {
                       config: stored
                   });
               } else if (message.type === 'UPDATE_CONFIG') {
+                  // Update interceptor config if present
+                  if (message.config && message.config.websockets) {
+                      (rawInterceptor as any).updateConfig(message.config.websockets);
+                  }
+                  // Update other config if needed
                   if (message.config) {
                       await rawInterceptor.updateConfig(message.config);
                   }
@@ -81,7 +86,7 @@ async function initialize() {
             
           case 'RAW_DATA_EVENT':
              // Handle intercepted data via core
-             console.log('Background Intercepted:', message.payload);
+             // console.log('Background Intercepted:', message.payload);
              await rawInterceptor.processEvent(message);
              return { success: true };
 
