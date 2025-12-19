@@ -327,15 +327,29 @@ export class WebSocketInterceptor implements DataInterceptor {
     }
 
     // Check URL filters
-    if (this.config.urlFilters.length > 0) {
-      const shouldInclude = this.config.urlFilters.some(filter => 
-        url.toLowerCase().includes(filter.toLowerCase())
-      );
-      if (!shouldInclude) {
-        return false;
+    // If filters are defined, ONLY intercept URLs that match at least one filter.
+    // Use lowerCase for case-insensitive matching.
+    if (this.config.urlFilters && this.config.urlFilters.length > 0) {
+      const lowerUrl = url.toLowerCase();
+      // Filter out empty strings first
+      const activeFilters = this.config.urlFilters.filter(f => f && f.trim().length > 0);
+      
+      if (activeFilters.length > 0) {
+          const shouldInclude = activeFilters.some(filter => 
+            lowerUrl.includes(filter.toLowerCase())
+          );
+          
+          if (this.debugMode) {
+            console.log(`[WebSocket Interceptor] URL Filter Check: ${url} -> Match? ${shouldInclude}`);
+          }
+
+          if (!shouldInclude) {
+            return false;
+          }
       }
     }
 
+    // If no filters are present (or only empty/whitespace filters), intercept everything by default.
     return true;
   }
 
@@ -638,7 +652,22 @@ export class WebSocketInterceptor implements DataInterceptor {
   }
 
   updateConfig(config: WebSocketConfig): void {
-    this.config = { ...this.config, ...config };
+    if (this.debugMode) {
+        console.log('[WebSocket Interceptor] Updating config:', config);
+    }
+    
+    // Create new config object to ensure updates take effect
+    this.config = { 
+        ...this.config, 
+        ...config,
+        // Ensure filters are array copies if provided
+        urlFilters: config.urlFilters ? [...config.urlFilters] : this.config.urlFilters,
+        excludeStrings: config.excludeStrings ? [...config.excludeStrings] : this.config.excludeStrings
+    };
+    
+    // Force re-evaluation of current connections if needed? 
+    // Usually not possible for WebSockets as we can't 'disconnect' them and reconnect without user visible side-effects.
+    // But any NEW connection will use the new config.
   }
 }
 
