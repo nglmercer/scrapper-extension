@@ -17,23 +17,31 @@ export function createManifest(platform: 'chrome' | 'firefox') {
     "storage", 
     "scripting",
     "tabs",
-    "nativeMessaging" // Required for the Native Host feature
+    "nativeMessaging"
+  ];
+  
+  const commonHostPermissions = [
+    "<all_urls>",
+    "ws://*/*",
+    "wss://*/*"
   ];
 
-  const commonHostPermissions = [
-    "<all_urls>"
-  ];
+  const baseConfig = {
+    manifest_version: 3,
+    ...baseManifest,
+    permissions: commonPermissions,
+    host_permissions: commonHostPermissions,
+    // Agregar CSP permisiva para desarrollo
+    content_security_policy: platform === 'chrome' ? {
+      extension_pages: "script-src 'self'; object-src 'self'; connect-src ws://localhost:* wss://*"
+    } : {
+      extension_pages: "script-src 'self'; connect-src ws://localhost:* wss://*"
+    }
+  };
 
   if (platform === 'chrome') {
-    // Manifest V3 for Chrome
     return {
-      manifest_version: 3,
-      ...baseManifest,
-      permissions: [
-        ...commonPermissions,
-        // Chrome specific additions if any
-      ],
-      host_permissions: commonHostPermissions,
+      ...baseConfig,
       background: {
         service_worker: "background.js",
         type: "module"
@@ -58,23 +66,16 @@ export function createManifest(platform: 'chrome' | 'firefox') {
       ]
     };
   } else {
-    // Manifest V3 for Firefox
     return {
-      manifest_version: 3,
-      ...baseManifest,
+      ...baseConfig,
       browser_specific_settings: {
         gecko: {
-          id: "nglmercer@gmail.com" // Fixed ID for native messaging to work consistently
+          id: "nglmercer@gmail.com"
         }
       },
-      permissions: [
-        ...commonPermissions,
-        // Firefox specific additions
-      ],
-      host_permissions: commonHostPermissions,
       background: {
         scripts: ["background.js"],
-        type: "module" // Important for ES modules in background
+        type: "module"
       },
       action: {
         default_title: baseManifest.name,
