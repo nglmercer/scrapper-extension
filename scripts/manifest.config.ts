@@ -37,12 +37,6 @@ export function createManifest(platform: 'chrome' | 'firefox') {
     } : {
       extension_pages: "script-src 'self'; connect-src ws://localhost:* wss://*"
     },
-    // Agregar propiedad data_collection_permissions requerida por GitHub
-    data_collection_permissions: {
-      websockets: true,
-      network_data: true,
-      description: "This extension intercepts WebSocket communications for debugging and analysis purposes"
-    }
   };
 
   if (platform === 'chrome') {
@@ -76,7 +70,11 @@ export function createManifest(platform: 'chrome' | 'firefox') {
       ...baseConfig,
       browser_specific_settings: {
         gecko: {
-          id: "nglmercer@gmail.com"
+          id: "nglmercer@gmail.com",
+          data_collection_permissions: {
+            required: ["technicalAndInteraction"],
+            optional: []
+          }
         }
       },
       background: {
