@@ -1,6 +1,6 @@
 {
   "name": "raw-data-interceptor",
-  "version": "3.2.5",
+  "version": "3.2.6",
   "description": "Cross-platform WebSocket data interceptor for Chrome, Firefox, and Electron",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
