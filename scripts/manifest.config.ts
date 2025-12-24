@@ -36,6 +36,12 @@ export function createManifest(platform: 'chrome' | 'firefox') {
       extension_pages: "script-src 'self'; object-src 'self'; connect-src ws://localhost:* wss://*"
     } : {
       extension_pages: "script-src 'self'; connect-src ws://localhost:* wss://*"
+    },
+    // Agregar propiedad data_collection_permissions requerida por GitHub
+    data_collection_permissions: {
+      websockets: true,
+      network_data: true,
+      description: "This extension intercepts WebSocket communications for debugging and analysis purposes"
     }
   };
 
