@@ -72,8 +72,8 @@ export function createManifest(platform: 'chrome' | 'firefox') {
         gecko: {
           id: "nglmercer@gmail.com",
           data_collection_permissions: {
-            required: ["technicalAndInteraction"],
-            optional: []
+            required: ["websiteContent", "websiteActivity"],
+            optional: ["technicalAndInteraction"]
           }
         }
       },
