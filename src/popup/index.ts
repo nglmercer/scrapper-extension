@@ -1,3 +1,8 @@
+// Import WebComponents
+import { registerComponents } from './components';
+
+// Register custom elements
+registerComponents();
 
 // Types for configuration
 interface WebSocketConfig {
@@ -13,7 +18,6 @@ interface ExtensionConfig {
     WebhookOption: boolean;
     WindowUrl: string;
     OpenWindow: boolean;
-    // New fields
     nativeMessaging: {
       enabled: boolean;
       appName: string;
@@ -59,140 +63,20 @@ let currentConfig: ExtensionConfig = { ...defaultConfig };
 let backgroundPort: chrome.runtime.Port | null = null;
 let saveTimeouts = new Map<string, Timer>();
 
-// Tag Input Handler Class
-class TagInput {
-    private container: HTMLElement;
-    private tagsList: HTMLElement;
-    private input: HTMLInputElement;
-    private hiddenInput: HTMLInputElement;
-    private tags: string[] = [];
-    private delimiter: string;
-
-    constructor(
-        containerId: string, 
-        tagsListId: string, 
-        inputId: string, 
-        hiddenInputId: string,
-        initialTags: string[] = [],
-        delimiter: string = '\n'
-    ) {
-        this.container = document.getElementById(containerId) as HTMLElement;
-        this.tagsList = document.getElementById(tagsListId) as HTMLElement;
-        this.input = document.getElementById(inputId) as HTMLInputElement;
-        this.hiddenInput = document.getElementById(hiddenInputId) as HTMLInputElement;
-        this.tags = initialTags;
-        this.delimiter = delimiter;
-
-        this.init();
-        this.render();
-    }
-
-    private init() {
-        // Handle input keydown
-        this.input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                this.addTag(this.input.value);
-            } else if (e.key === 'Backspace' && this.input.value === '' && this.tags.length > 0) {
-                this.removeTag(this.tags.length - 1);
-            }
-        });
-
-        // Handle focus on container
-        this.container.addEventListener('click', () => {
-            this.input.focus();
-        });
-
-        // Sync hidden input initially
-        this.updateHiddenInput();
-    }
-
-    public addTag(text: string) {
-        const value = text.trim();
-        if (value && !this.tags.includes(value)) {
-            this.tags.push(value);
-            this.input.value = '';
-            this.render();
-            this.updateHiddenInput();
-            this.triggerChange();
-        } else {
-            this.input.value = ''; // Clear if empty or duplicate
-        }
-    }
-
-    public removeTag(index: number) {
-        this.tags.splice(index, 1);
-        this.render();
-        this.updateHiddenInput();
-        this.triggerChange();
-    }
-
-    public setTags(tags: string[]) {
-        this.tags = tags;
-        this.render();
-        this.updateHiddenInput();
-    }
-
-    public getTags(): string[] {
-        return this.tags;
-    }
-
-    private updateHiddenInput() {
-        this.hiddenInput.value = this.tags.join(this.delimiter);
-    }
-
-    private triggerChange() {
-        // Create synthetic input event on the hidden input to trigger listeners
-        const event = new Event('input', { bubbles: true });
-        this.hiddenInput.dispatchEvent(event);
-    }
-
-    private render() {
-        this.tagsList.innerHTML = '';
-        this.tags.forEach((tag, index) => {
-            const tagEl = document.createElement('div');
-            tagEl.className = 'tag';
-            
-            const tagText = document.createElement('span');
-            tagText.textContent = tag;
-            
-            const removeBtn = document.createElement('span');
-            removeBtn.className = 'remove-tag';
-            removeBtn.innerHTML = '&times;';
-            removeBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.removeTag(index);
-            };
-
-            tagEl.appendChild(tagText);
-            tagEl.appendChild(removeBtn);
-            this.tagsList.appendChild(tagEl);
-        });
-    }
+// Helper to get typed WebComponent
+function getWebComponent<T extends HTMLElement>(id: string): T {
+    return document.getElementById(id) as T;
 }
 
-// DOM Interface
-interface UIElements {
+// Helper to get vanilla element
+function getElement<T extends HTMLElement>(id: string): T {
+    return document.getElementById(id) as T;
+}
+
+// DOM Interface for vanilla elements
+interface VanillaUIElements {
     tabButtons: NodeListOf<HTMLButtonElement>;
     tabContents: NodeListOf<HTMLElement>;
-    masterSwitch: HTMLInputElement;
-    WebhookOption: HTMLInputElement;
-    WebhookUrl: HTMLInputElement;
-    OpenWindow: HTMLInputElement;
-    WindowUrl: HTMLInputElement;
-    // New UI Elements
-    nativeEnabled: HTMLInputElement;
-    nativeAppName: HTMLInputElement;
-    socketEnabled: HTMLInputElement;
-    socketUrl: HTMLInputElement;
-    
-    debugMode: HTMLInputElement;
-    eventBufferSize: HTMLInputElement;
-    wsEnabled: HTMLInputElement;
-    // wsUrlFilters: HTMLTextAreaElement; // Replaced by TagInput hidden input wrapper or managed separately
-    wsMinSize: HTMLInputElement;
-    wsMaxSize: HTMLInputElement;
-    // wsExcludeStrings: HTMLInputElement; // Replaced by TagInput hidden input wrapper
     saveAdvanced: HTMLButtonElement;
     resetAdvanced: HTMLButtonElement;
     saveFilters: HTMLButtonElement;
@@ -200,76 +84,18 @@ interface UIElements {
     exportConfig: HTMLButtonElement;
     importConfig: HTMLButtonElement;
     connectionStatus: HTMLElement;
-    
-    // Containers
-    WebhookOption_container: HTMLElement;
-    OpenWindow_container: HTMLElement;
-    native_container: HTMLElement;
-    socket_container: HTMLElement;
-    
-    // Header
     popOutBtn: HTMLButtonElement;
 }
 
-// Helper to get element typed
-function getEl<T extends HTMLElement>(id: string): T {
-    return document.getElementById(id) as T;
-}
-
-// Cache DOM elements
-function getElements(): UIElements {
-    return {
-        tabButtons: document.querySelectorAll('.tab-btn'),
-        tabContents: document.querySelectorAll('.tab-content'),
-        masterSwitch: getEl<HTMLInputElement>('masterSwitch'),
-        WebhookOption: getEl<HTMLInputElement>('WebhookOption'),
-        WebhookUrl: getEl<HTMLInputElement>('WebhookUrl'),
-        OpenWindow: getEl<HTMLInputElement>('OpenWindow'),
-        WindowUrl: getEl<HTMLInputElement>('WindowUrl'),
-        
-        nativeEnabled: getEl<HTMLInputElement>('nativeEnabled'),
-        nativeAppName: getEl<HTMLInputElement>('nativeAppName'),
-        socketEnabled: getEl<HTMLInputElement>('socketEnabled'),
-        socketUrl: getEl<HTMLInputElement>('socketUrl'),
-        
-        debugMode: getEl<HTMLInputElement>('debugMode'),
-        eventBufferSize: getEl<HTMLInputElement>('eventBufferSize'),
-        wsEnabled: getEl<HTMLInputElement>('wsEnabled'),
-        // These are now handled via TagInput hidden inputs
-        // wsUrlFilters: getEl<HTMLTextAreaElement>('wsUrlFilters'),
-        wsMinSize: getEl<HTMLInputElement>('wsMinSize'),
-        wsMaxSize: getEl<HTMLInputElement>('wsMaxSize'),
-        // wsExcludeStrings: getEl<HTMLInputElement>('wsExcludeStrings'), 
-        saveAdvanced: getEl<HTMLButtonElement>('saveAdvanced'),
-        resetAdvanced: getEl<HTMLButtonElement>('resetAdvanced'),
-        saveFilters: getEl<HTMLButtonElement>('saveFilters'),
-        resetFilters: getEl<HTMLButtonElement>('resetFilters'),
-        exportConfig: getEl<HTMLButtonElement>('exportConfig'),
-        importConfig: getEl<HTMLButtonElement>('importConfig'),
-        connectionStatus: getEl<HTMLElement>('connectionStatus'),
-        WebhookOption_container: getEl<HTMLElement>('WebhookOption_container'),
-        OpenWindow_container: getEl<HTMLElement>('OpenWindow_container'),
-        native_container: getEl<HTMLElement>('native_container'),
-        socket_container: getEl<HTMLElement>('socket_container'),
-        popOutBtn: getEl<HTMLButtonElement>('popOutBtn'),
-    };
-}
-
-let ui: UIElements;
-let urlTagInput: TagInput;
-let excludeTagInput: TagInput;
-
 /**
- * Initialize Tabs logic
+ * Initialize Tabs logic (vanilla)
  */
-function initTabs() {
+function initTabs(ui: VanillaUIElements) {
     ui.tabButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-             // Remove active class from all
             ui.tabButtons.forEach(b => b.classList.remove('active'));
             ui.tabContents.forEach(c => c.classList.remove('active'));
             
-            // Add active to current
             btn.classList.add('active');
             const tabId = btn.dataset.tab;
             if (tabId) {
@@ -280,21 +106,7 @@ function initTabs() {
     });
 }
 
-function initPopOut() {
-    // Check if we are already in a detached window (not a browser action popup)
-    // A simple heuristic is checking window type or URL parameters if we set them,
-    // but checking chrome.windows.getCurrent works too.
-    
-    chrome.windows.getCurrent((win) => {
-        if (win.type === 'popup') {
-           // We are likely in the detached window or a very specific popup mode.
-           // Can hide button to avoid recursion, though standard browser action is also 'popup' type in some contexts?
-           // Actually, standard extension popup usually closes on blur. 
-           // If we created it via windows.create({type: 'popup'}), it persists.
-           // We can check search params or just compare functionality.
-        }
-    });
-
+function initPopOut(ui: VanillaUIElements) {
     ui.popOutBtn.addEventListener('click', () => {
         const width = 400;
         const height = 620;
@@ -306,11 +118,9 @@ function initPopOut() {
             height: height
         });
         
-        // Close the current transient popup
         window.close();
     });
 
-    // If we are in detached mode, hide the button
     if (new URLSearchParams(window.location.search).get('mode') === 'detached') {
         ui.popOutBtn.style.display = 'none';
         document.body.classList.add('detached');
@@ -325,7 +135,7 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
     if (!toast) return;
     
     toast.textContent = message;
-    toast.className = `toast ${type === 'error' ? 'bg-error' : ''}`; // simplified logic
+    toast.className = `toast ${type === 'error' ? 'bg-error' : ''}`;
     toast.classList.remove('hidden');
     
     setTimeout(() => {
@@ -360,8 +170,7 @@ async function saveConfig(config: ExtensionConfig) {
  */
 async function loadConfig() {
     try {
-        const stored = await chrome.storage.local.get(null) || {}; // Get all, guard against undefined
-        // Merge with default to ensure all keys exist
+        const stored = await chrome.storage.local.get(null) || {};
         currentConfig = { 
             ...defaultConfig, 
             ...stored,
@@ -377,104 +186,122 @@ async function loadConfig() {
 }
 
 /**
- * Update UI fields based on current config
+ * Update UI fields based on current config using setData
  */
 function updateUI() {
-    // General
-    ui.masterSwitch.checked = currentConfig.masterSwitch;
-    ui.WebhookOption.checked = currentConfig.WebhookOption;
-    ui.WebhookUrl.value = currentConfig.WebhookUrl || '';
-    ui.OpenWindow.checked = currentConfig.OpenWindow;
-    ui.WindowUrl.value = currentConfig.WindowUrl || '';
-
-    // Native & Socket
-    if (currentConfig.nativeMessaging) {
-        ui.nativeEnabled.checked = currentConfig.nativeMessaging.enabled;
-        ui.nativeAppName.value = currentConfig.nativeMessaging.appName || '';
-    }
-    if (currentConfig.socketStream) {
-        ui.socketEnabled.checked = currentConfig.socketStream.enabled;
-        ui.socketUrl.value = currentConfig.socketStream.url || '';
-    }
-
-    // Advanced
-    ui.debugMode.checked = currentConfig.debugMode;
-    ui.eventBufferSize.value = String(currentConfig.eventBufferSize);
-
-    // Filters
-    if (currentConfig.websockets) {
-        ui.wsEnabled.checked = currentConfig.websockets.enabled;
-        
-        // Update Tag Inputs
-        urlTagInput.setTags(currentConfig.websockets.urlFilters || []);
-        excludeTagInput.setTags(currentConfig.websockets.excludeStrings || []);
-        
-        ui.wsMinSize.value = String(currentConfig.websockets.minSize);
-        ui.wsMaxSize.value = String(currentConfig.websockets.maxSize);
-    }
-
-    updateCollapsibleVisibility();
-}
-
-/**
- * Toggle visibility of collapsible sections
- */
-function updateCollapsibleVisibility() {
-    if (ui.WebhookOption.checked) {
-        ui.WebhookOption_container.classList.add('visible');
-    } else {
-        ui.WebhookOption_container.classList.remove('visible');
-    }
-
-    if (ui.OpenWindow.checked) {
-        ui.OpenWindow_container.classList.add('visible');
-    } else {
-        ui.OpenWindow_container.classList.remove('visible');
-    }
+    // Get WebComponents
+    const masterSwitch = getWebComponent<HTMLElement & { setData(data: boolean): void }>('masterSwitch');
+    const debugMode = getWebComponent<HTMLElement & { setData(data: boolean): void }>('debugMode');
+    const wsEnabled = getWebComponent<HTMLElement & { setData(data: boolean): void }>('wsEnabled');
     
-    if (ui.nativeEnabled.checked) {
-        ui.native_container.classList.add('visible');
-    } else {
-        ui.native_container.classList.remove('visible');
-    }
+    const WebhookUrl = getWebComponent<HTMLElement & { setData(data: string): void }>('WebhookUrl');
+    const WindowUrl = getWebComponent<HTMLElement & { setData(data: string): void }>('WindowUrl');
+    const nativeAppName = getWebComponent<HTMLElement & { setData(data: string): void }>('nativeAppName');
+    const socketUrl = getWebComponent<HTMLElement & { setData(data: string): void }>('socketUrl');
     
-    if (ui.socketEnabled.checked) {
-        ui.socket_container.classList.add('visible');
-    } else {
-        ui.socket_container.classList.remove('visible');
+    const eventBufferSize = getWebComponent<HTMLElement & { setData(data: number): void }>('eventBufferSize');
+    const wsMinSize = getWebComponent<HTMLElement & { setData(data: number): void }>('wsMinSize');
+    const wsMaxSize = getWebComponent<HTMLElement & { setData(data: number): void }>('wsMaxSize');
+    
+    const urlFilters = getWebComponent<HTMLElement & { setData(data: string): void }>('urlFilters');
+    const excludeStrings = getWebComponent<HTMLElement & { setData(data: string): void }>('excludeStrings');
+    
+    // Config Cards
+    const webhookCard = getWebComponent<HTMLElement & { getToggle(): any }>('webhookCard');
+    const windowCard = getWebComponent<HTMLElement & { getToggle(): any }>('windowCard');
+    const nativeCard = getWebComponent<HTMLElement & { getToggle(): any }>('nativeCard');
+    const socketCard = getWebComponent<HTMLElement & { getToggle(): any }>('socketCard');
+
+    // Update toggles
+    masterSwitch.setData(currentConfig.masterSwitch);
+    debugMode.setData(currentConfig.debugMode);
+    wsEnabled.setData(currentConfig.websockets.enabled);
+
+    // Update text inputs
+    WebhookUrl.setData(currentConfig.WebhookUrl || '');
+    WindowUrl.setData(currentConfig.WindowUrl || '');
+    nativeAppName.setData(currentConfig.nativeMessaging?.appName || '');
+    socketUrl.setData(currentConfig.socketStream?.url || '');
+
+    // Update number inputs
+    eventBufferSize.setData(currentConfig.eventBufferSize);
+    wsMinSize.setData(currentConfig.websockets.minSize);
+    wsMaxSize.setData(currentConfig.websockets.maxSize);
+
+    // Update tag inputs
+    urlFilters.setData(currentConfig.websockets.urlFilters?.join('\n') || '');
+    excludeStrings.setData(currentConfig.websockets.excludeStrings?.join(',') || '');
+
+    // Update config card toggles
+    if (webhookCard?.getToggle()) {
+        webhookCard.getToggle().setData(currentConfig.WebhookOption);
+    }
+    if (windowCard?.getToggle()) {
+        windowCard.getToggle().setData(currentConfig.OpenWindow);
+    }
+    if (nativeCard?.getToggle()) {
+        nativeCard.getToggle().setData(currentConfig.nativeMessaging?.enabled || false);
+    }
+    if (socketCard?.getToggle()) {
+        socketCard.getToggle().setData(currentConfig.socketStream?.enabled || false);
     }
 }
 
 /**
- * Collect State from UI to Config object
+ * Collect State from UI to Config object using getData
  */
 function getConfigFromUI(): ExtensionConfig {
+    // Get WebComponents
+    const masterSwitch = getWebComponent<HTMLElement & { getData(): boolean }>('masterSwitch');
+    const debugMode = getWebComponent<HTMLElement & { getData(): boolean }>('debugMode');
+    const wsEnabled = getWebComponent<HTMLElement & { getData(): boolean }>('wsEnabled');
+    
+    const WebhookUrl = getWebComponent<HTMLElement & { getData(): string }>('WebhookUrl');
+    const WindowUrl = getWebComponent<HTMLElement & { getData(): string }>('WindowUrl');
+    const nativeAppName = getWebComponent<HTMLElement & { getData(): string }>('nativeAppName');
+    const socketUrl = getWebComponent<HTMLElement & { getData(): string }>('socketUrl');
+    
+    const eventBufferSize = getWebComponent<HTMLElement & { getData(): number }>('eventBufferSize');
+    const wsMinSize = getWebComponent<HTMLElement & { getData(): number }>('wsMinSize');
+    const wsMaxSize = getWebComponent<HTMLElement & { getData(): number }>('wsMaxSize');
+    
+    const urlFilters = getWebComponent<HTMLElement & { getData(): string }>('urlFilters');
+    const excludeStrings = getWebComponent<HTMLElement & { getData(): string }>('excludeStrings');
+    
+    // Config Cards
+    const webhookCard = getWebComponent<HTMLElement & { getToggle(): any }>('webhookCard');
+    const windowCard = getWebComponent<HTMLElement & { getToggle(): any }>('windowCard');
+    const nativeCard = getWebComponent<HTMLElement & { getToggle(): any }>('nativeCard');
+    const socketCard = getWebComponent<HTMLElement & { getToggle(): any }>('socketCard');
+
+    // Parse tag inputs
+    const urlTags = urlFilters.getData().split('\n').filter(t => t.trim());
+    const excludeTags = excludeStrings.getData().split(',').filter(t => t.trim());
+
     return {
         ...currentConfig,
-        masterSwitch: ui.masterSwitch.checked,
-        WebhookOption: ui.WebhookOption.checked,
-        WebhookUrl: ui.WebhookUrl.value.trim(),
-        OpenWindow: ui.OpenWindow.checked,
-        WindowUrl: ui.WindowUrl.value.trim(),
-        
+        masterSwitch: masterSwitch.getData(),
+        debugMode: debugMode.getData(),
+        websockets: {
+            enabled: wsEnabled.getData(),
+            urlFilters: urlTags,
+            minSize: wsMinSize.getData(),
+            maxSize: wsMaxSize.getData(),
+            excludeStrings: excludeTags
+        },
+        WebhookUrl: WebhookUrl.getData().trim(),
+        WindowUrl: WindowUrl.getData().trim(),
         nativeMessaging: {
-            enabled: ui.nativeEnabled.checked,
-            appName: ui.nativeAppName.value.trim()
+            enabled: nativeCard.getToggle().getData(),
+            appName: nativeAppName.getData().trim()
         },
         socketStream: {
-            enabled: ui.socketEnabled.checked,
-            url: ui.socketUrl.value.trim()
+            enabled: socketCard.getToggle().getData(),
+            url: socketUrl.getData().trim()
         },
-
-        debugMode: ui.debugMode.checked,
-        eventBufferSize: parseInt(ui.eventBufferSize.value) || 1000,
-        websockets: {
-            enabled: ui.wsEnabled.checked,
-            urlFilters: urlTagInput.getTags(), // Get directly from tag input instance
-            minSize: parseInt(ui.wsMinSize.value) || 0,
-            maxSize: parseInt(ui.wsMaxSize.value) || 10000,
-            excludeStrings: excludeTagInput.getTags(), // Get directly from tag input instance
-        }
+        WebhookOption: webhookCard.getToggle().getData(),
+        OpenWindow: windowCard.getToggle().getData(),
+        eventBufferSize: eventBufferSize.getData()
     };
 }
 
@@ -490,57 +317,28 @@ function debouncedSave(key: string, callback: () => void, delay = 800) {
 }
 
 /**
- * Setup Event Listeners
+ * Setup Event Listeners for WebComponents
  */
-function initEventListeners() {
-    // Toggles with immediate save
-    const toggles = [
-        { el: ui.masterSwitch, key: 'masterSwitch' },
-        { el: ui.WebhookOption, key: 'WebhookOption' },
-        { el: ui.OpenWindow, key: 'OpenWindow' },
-        { el: ui.nativeEnabled, key: 'nativeEnabled' },
-        { el: ui.socketEnabled, key: 'socketEnabled' },
-        { el: ui.debugMode, key: 'debugMode' },
-        { el: ui.wsEnabled, key: 'wsEnabled' },
-    ];
-
-    toggles.forEach(({ el, key }) => {
-        el.addEventListener('change', async () => {
-            updateCollapsibleVisibility();
-            const config = getConfigFromUI();
-            await saveConfig(config);
+function initEventListeners(ui: VanillaUIElements) {
+    // Listen to change events from all WebComponents
+    const components = document.querySelectorAll('raw-toggle, raw-text-input, raw-number-input, raw-tag-input, raw-config-card');
+    
+    components.forEach(comp => {
+        // Listen for both change and input events
+        comp.addEventListener('change', () => {
+            debouncedSave('component_change', async () => {
+                const config = getConfigFromUI();
+                await saveConfig(config);
+            });
         });
-    });
 
-    // Inputs with debounce
-    const inputs = [
-        ui.WebhookUrl, ui.WindowUrl, 
-        ui.nativeAppName, ui.socketUrl,
-        ui.eventBufferSize, 
-        ui.wsMinSize, ui.wsMaxSize
-    ];
-
-    inputs.forEach(input => {
-        input.addEventListener('input', () => {
-            debouncedSave('input_change', async () => {
+        comp.addEventListener('input', () => {
+            debouncedSave('component_input', async () => {
                 const config = getConfigFromUI();
                 await saveConfig(config);
             });
         });
     });
-
-    // Listen to changes on the hidden inputs for the TagInputs
-    [
-        getEl<HTMLInputElement>('wsUrlFilters'), 
-        getEl<HTMLInputElement>('wsExcludeStrings')
-    ].forEach(hiddenInput => {
-        hiddenInput.addEventListener('input', () => {
-             debouncedSave('tag_change', async () => {
-                const config = getConfigFromUI();
-                await saveConfig(config);
-            });
-        })
-    })
 
     // Buttons
     ui.saveAdvanced.addEventListener('click', async () => {
@@ -552,7 +350,6 @@ function initEventListeners() {
     });
 
     ui.resetAdvanced.addEventListener('click', () => {
-        // Only reset advanced fields
         const partialConfig = {
             ...currentConfig,
             debugMode: defaultConfig.debugMode,
@@ -608,7 +405,7 @@ function initEventListeners() {
 /**
  * Background Connection
  */
-function connectBackground() {
+function connectBackground(ui: VanillaUIElements) {
     try {
         backgroundPort = chrome.runtime.connect({ name: 'popup' });
         
@@ -621,7 +418,6 @@ function connectBackground() {
             backgroundPort = null;
         });
 
-        // Request initial config update just in case
         backgroundPort.postMessage({ type: 'GET_CONFIG' });
         
         backgroundPort.onMessage.addListener((msg) => {
@@ -629,13 +425,9 @@ function connectBackground() {
                 currentConfig = { ...currentConfig, ...msg.config };
                 updateUI();
             } else if (msg.type === 'LOG_ENTRY') {
-                // Forward background logs to popup console
                 const { level, message, data, source } = msg.log;
                 const prefix = `[BG-${source}]`;
                 
-                // Only log if debug mode is on or it's important
-                // The logger already filters DEBUG logs based on debugMode state in background,
-                // but we might want to respect local debugMode too.
                 if (level === 'DEBUG' && !currentConfig.debugMode) return;
 
                 switch (level) {
@@ -651,38 +443,30 @@ function connectBackground() {
     }
 }
 
-// Data Migration or Cleanup if needed
-function integrityCheck() {
-    // If we have legacy keys or want to clean up local storage, do it here
+// Cache vanilla UI elements
+function getVanillaElements(): VanillaUIElements {
+    return {
+        tabButtons: document.querySelectorAll('.tab-btn'),
+        tabContents: document.querySelectorAll('.tab-content'),
+        saveAdvanced: getElement<HTMLButtonElement>('saveAdvanced'),
+        resetAdvanced: getElement<HTMLButtonElement>('resetAdvanced'),
+        saveFilters: getElement<HTMLButtonElement>('saveFilters'),
+        resetFilters: getElement<HTMLButtonElement>('resetFilters'),
+        exportConfig: getElement<HTMLButtonElement>('exportConfig'),
+        importConfig: getElement<HTMLButtonElement>('importConfig'),
+        connectionStatus: getElement<HTMLElement>('connectionStatus'),
+        popOutBtn: getElement<HTMLButtonElement>('popOutBtn'),
+    };
 }
 
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
-    ui = getElements();
+    const ui = getVanillaElements();
     
-    // Initialize Tag Inputs
-    urlTagInput = new TagInput(
-        'urlFiltersContainer', 
-        'urlTagsList', 
-        'urlInput', 
-        'wsUrlFilters',
-        [],
-        '\n'
-    );
-    
-    excludeTagInput = new TagInput(
-        'excludeStringsContainer', 
-        'excludeTagsList', 
-        'excludeInput', 
-        'wsExcludeStrings',
-        [],
-        ','
-    );
-
-    initTabs();
-    initEventListeners();
-    initPopOut();
+    initTabs(ui);
+    initEventListeners(ui);
+    initPopOut(ui);
     
     await loadConfig();
-    connectBackground();
+    connectBackground(ui);
 });
