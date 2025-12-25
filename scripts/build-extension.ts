@@ -68,26 +68,18 @@ fs.writeFileSync(
   JSON.stringify(manifest, null, 2)
 );
 
-// Popup build - new structure with components
-const popupResult = await build({
-  entrypoints: [
-    path.join('src/popup/popup-manager.ts'),
-    path.join('src/popup/components/index.ts')
-  ],
+// Popup build
+await build({
+  entrypoints: [path.join('src/popup/index.ts')],
   outdir: outDir,
-  target: 'browser',
+  target: 'browser', 
   format: 'esm',
-  naming: '[name].js' // Will create popup-manager.js and index.js
+  naming: 'popup.js' // Explicitly name it
 });
-
-if (!popupResult.success) {
-  console.error("Popup Build failed:", popupResult.logs);
-  process.exit(1);
-}
 
 // Copy popup assets
 const popupAssets = [
-  { src: 'src/popup/popup.html', dest: 'popup.html' },
+  { src: 'src/popup/index.html', dest: 'popup.html' },
   { src: 'src/popup/style.css', dest: 'style.css' }
 ];
 

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAW Data Interceptor</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo-area">
+                <h1>RAW Interceptor</h1>
+                <span class="version">v3.1.0</span>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" id="popOutBtn" title="Open in new window">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                </button>
+                <div class="status-indicator" id="connectionStatus" title="Connection Status"></div>
+            </div>
+        </header>
+
+        <nav class="tabs-nav">
+            <button class="tab-btn active" data-tab="general">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                General
+            </button>
+            <button class="tab-btn" data-tab="advanced">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+                Advanced
+            </button>
+            <button class="tab-btn" data-tab="filters">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                </svg>
+                Filters
+            </button>
+        </nav>
+
+        <main class="content-area">
+            <!-- General Tab -->
+            <section id="general" class="tab-content active">
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>Enable Interceptor</h3>
+                            <p>Global master switch for all extraction</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="masterSwitch" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>Webhook Integration</h3>
+                            <p>Send intercepted data to external URL</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="WebhookOption">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-content collapsible" id="WebhookOption_container">
+                        <div class="input-group">
+                            <label for="WebhookUrl">Webhook URL</label>
+                            <input type="text" id="WebhookUrl" placeholder="https://api.example.com/webhook">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>External Window</h3>
+                            <p>Display data in a separate popped-out window</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="OpenWindow">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-content collapsible" id="OpenWindow_container">
+                        <div class="input-group">
+                            <label for="WindowUrl">Window URL</label>
+                            <input type="text" id="WindowUrl" placeholder="https://..." value="/">
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>Native Messaging</h3>
+                            <p>Send data to local application</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="nativeEnabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-content collapsible" id="native_container">
+                        <div class="input-group">
+                            <label for="nativeAppName">App Name (com.company.app)</label>
+                            <input type="text" id="nativeAppName" placeholder="com.scrapper.host">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>WebSocket Stream</h3>
+                            <p>Stream data to a WS Server</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="socketEnabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="card-content collapsible" id="socket_container">
+                        <div class="input-group">
+                            <label for="socketUrl">WS Server URL</label>
+                            <input type="text" id="socketUrl" placeholder="ws://localhost:3000">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Advanced Tab -->
+            <section id="advanced" class="tab-content">
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>Debug Mode</h3>
+                            <p>Verbose logging to console</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="debugMode">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-content">
+                        <div class="input-group">
+                            <label for="eventBufferSize">Event Buffer Size</label>
+                            <input type="number" id="eventBufferSize" value="1000" min="100" max="10000">
+                            <p class="help-text">Max events to keep in memory (100-10000)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions-row">
+                    <button class="btn btn-primary" id="saveAdvanced">Save Settings</button>
+                    <button class="btn btn-secondary" id="resetAdvanced">Reset</button>
+                </div>
+            </section>
+
+            <!-- Filters Tab -->
+            <section id="filters" class="tab-content">
+                <div class="card">
+                    <div class="card-item">
+                        <div class="item-label">
+                            <h3>WebSocket Interception</h3>
+                            <p>Enable/Disable WS traffic capturing</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="wsEnabled" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h4>URL Filters</h4>
+                        <span class="badge">Contains</span>
+                    </div>
+                    <div class="card-content">
+                        <div class="tag-input-container" id="urlFiltersContainer">
+                            <div class="tags-list" id="urlTagsList"></div>
+                            <input type="text" id="urlInput" placeholder="Add filter and press Enter..." autocomplete="off">
+                        </div>
+                        <input type="hidden" id="wsUrlFilters">
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Payload Limits (Bytes)</h4>
+                    </div>
+                    <div class="card-content row">
+                        <div class="input-group flex-1">
+                            <label for="wsMinSize">Min Size</label>
+                            <input type="number" id="wsMinSize" value="10" min="0">
+                        </div>
+                        <div class="input-group flex-1">
+                            <label for="wsMaxSize">Max Size</label>
+                            <input type="number" id="wsMaxSize" value="10000" min="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Exclude Strings</h4>
+                    </div>
+                    <div class="card-content">
+                        <div class="tag-input-container" id="excludeStringsContainer">
+                            <div class="tags-list" id="excludeTagsList"></div>
+                            <input type="text" id="excludeInput" placeholder="Add string and press Enter..." autocomplete="off">
+                        </div>
+                        <input type="hidden" id="wsExcludeStrings">
+                    </div>
+                </div>
+
+                <div class="actions-row">
+                    <button class="btn btn-primary" id="saveFilters">Save Filters</button>
+                    <button class="btn btn-secondary" id="resetFilters">Reset</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="actions-row">
+                    <button class="btn btn-outline" id="exportConfig">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Export
+                    </button>
+                    <button class="btn btn-outline" id="importConfig">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Import
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <div id="toast" class="toast hidden">Settings saved</div>
+    </div>
+    <script src="popup.js" type="module"></script>
+</body>
+</html>
