@@ -29,7 +29,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun run build-simple.js",
+    "build": "bun run type-check && bun run build:firefox:extension && bun run build:chrome:extension",
     "build:clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "bun build src/index.ts --outdir dist --format esm --target browser --splitting",

@@ -11,8 +11,10 @@ import type {
   ConnectionInfo, 
   Platform,
   WebSocketConfig,
-  InterceptorConfig
+  InterceptorConfig,
+  ConnectionManagerConfig
 } from '@/types/index.js';
+import { WSConnectionManager, type ManagedConnection, type CloneConnectionOptions } from './ws-connection-manager.js';
 
 /**
  * WebSocket connection wrapper
@@ -173,6 +175,7 @@ export class WebSocketInterceptor implements DataInterceptor {
   private stats: InterceptorStats;
   private connectionCounter = 0;
   private originalWebSocket: typeof WebSocket;
+  private connectionManager: WSConnectionManager;
 
   constructor(
     private config: WebSocketConfig = {
@@ -181,7 +184,8 @@ export class WebSocketInterceptor implements DataInterceptor {
       minSize: 0,
       maxSize: Infinity,
       excludeStrings: []
-    }
+    },
+    connectionManagerConfig?: ConnectionManagerConfig
   ) {
     this.originalWebSocket = WebSocket;
     this.stats = {
@@ -192,6 +196,12 @@ export class WebSocketInterceptor implements DataInterceptor {
       runtime: 0,
       platform: this.detectPlatform()
     };
+    
+    // Initialize connection manager
+    this.connectionManager = new WSConnectionManager(
+      this.stats.platform,
+      connectionManagerConfig
+    );
   }
 
   async initialize(): Promise<void> {
@@ -686,6 +696,149 @@ export class WebSocketInterceptor implements DataInterceptor {
     // Force re-evaluation of current connections if needed? 
     // Usually not possible for WebSockets as we can't 'disconnect' them and reconnect without user visible side-effects.
     // But any NEW connection will use the new config.
+  }
+
+  // ========== Connection Manager Methods ==========
+
+  /**
+   * Clone an existing WebSocket connection
+   * Creates a new WebSocket connection to the same URL
+   */
+  async cloneConnection(
+    originalConnection: ConnectionInfo,
+    options: CloneConnectionOptions = {}
+  ): Promise<string> {
+    return this.connectionManager.cloneConnection(originalConnection, options);
+  }
+
+  /**
+   * Create a new persistent WebSocket connection
+   */
+  async createPersistentConnection(
+    url: string,
+    protocols?: string | string[],
+    options: CloneConnectionOptions = {}
+  ): Promise<string> {
+    return this.connectionManager.createPersistentConnection(url, protocols, options);
+  }
+
+  /**
+   * Close a managed connection
+   */
+  closeManagedConnection(connectionId: string): void {
+    this.connectionManager.closeConnection(connectionId);
+  }
+
+  /**
+   * Remove a managed connection from the manager
+   */
+  removeManagedConnection(connectionId: string): void {
+    this.connectionManager.removeConnection(connectionId);
+  }
+
+  /**
+   * Close all managed connections
+   */
+  closeAllManagedConnections(): void {
+    this.connectionManager.closeAllConnections();
+  }
+
+  /**
+   * Remove all managed connections
+   */
+  removeAllManagedConnections(): void {
+    this.connectionManager.removeAllConnections();
+  }
+
+  /**
+   * Get information about a specific managed connection
+   */
+  getManagedConnection(connectionId: string): ManagedConnection | undefined {
+    return this.connectionManager.getConnection(connectionId);
+  }
+
+  /**
+   * Get all managed connections
+   */
+  getManagedConnections(): ManagedConnection[] {
+    return this.connectionManager.getAllConnections();
+  }
+
+  /**
+   * Get active (open) managed connections
+   */
+  getActiveManagedConnections(): ManagedConnection[] {
+    return this.connectionManager.getActiveConnections();
+  }
+
+  /**
+   * Get persistent managed connections
+   */
+  getPersistentConnections(): ManagedConnection[] {
+    return this.connectionManager.getPersistentConnections();
+  }
+
+  /**
+   * Get cloned managed connections
+   */
+  getClonedConnections(): ManagedConnection[] {
+    return this.connectionManager.getClonedConnections();
+  }
+
+  /**
+   * Update connection manager configuration
+   */
+  updateConnectionManagerConfig(config: Partial<ConnectionManagerConfig>): void {
+    this.connectionManager.updateConfig(config);
+  }
+
+  /**
+   * Get connection manager configuration
+   */
+  getConnectionManagerConfig(): ConnectionManagerConfig {
+    return this.connectionManager.getConfig();
+  }
+
+  /**
+   * Enable or disable the connection manager
+   */
+  setConnectionManagerEnabled(enabled: boolean): void {
+    this.connectionManager.setEnabled(enabled);
+  }
+
+  /**
+   * Check if connection manager is enabled
+   */
+  isConnectionManagerEnabled(): boolean {
+    return this.connectionManager.isEnabled();
+  }
+
+  /**
+   * Get connection manager statistics
+   */
+  getConnectionManagerStats(): {
+    total: number;
+    active: number;
+    persistent: number;
+    cloned: number;
+    closed: number;
+    error: number;
+  } {
+    return this.connectionManager.getStats();
+  }
+
+  /**
+   * Register a message handler for managed connections
+   */
+  onManagedMessage(handler: (connectionId: string, data: any) => void): () => void {
+    return this.connectionManager.onMessage(handler);
+  }
+
+  /**
+   * Clean up connection manager
+   */
+  destroyConnectionManager(): void {
+    this.connectionManager.destroy();
   }
 }
 

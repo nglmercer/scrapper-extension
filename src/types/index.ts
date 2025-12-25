@@ -24,6 +24,15 @@ export interface MessageMetadata {
 
 export type Platform = 'tiktok' | 'kick' | 'twitch' | 'youtube' | 'unknown';
 
+export interface ConnectionManagerConfig {
+  enabled: boolean;
+  maxConnections: number;
+  autoReconnect: boolean;
+  reconnectDelay: number;
+  maxReconnectAttempts: number;
+  keepAliveInterval: number;
+}
+
 export interface InterceptorConfig {
   masterSwitch: boolean;
   debugMode: boolean;
@@ -42,6 +51,7 @@ export interface InterceptorConfig {
     url: string;
   };
   websockets: WebSocketConfig;
+  connectionManager: ConnectionManagerConfig;
 }
 
 export interface WebSocketConfig {
